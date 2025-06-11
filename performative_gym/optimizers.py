@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Generic, Literal, Protocol, TypeAlias, TypeVar, cast
 
 from jax import Array, grad, jacobian
@@ -7,6 +7,19 @@ import jax.numpy as jnp
 import jax
 
 import optax
+
+__all__ = [
+    "DFO",
+    "DPerfGD",
+    "Objective",
+    "Optimizer",
+    "Optimizers",
+    "PerfGDReinforce",
+    "PerfGDReparam",
+    "RGD",
+    "RRM",
+    "RegRRM",
+]
 
 Optimizers: TypeAlias = Literal[
     "RGD",
@@ -101,7 +114,7 @@ class RRM(Optimizer[Y], Generic[Y]):
         super().__init__(params, lr, loss_fn, proj_fn)
         self.tol = tol
 
-    def compute_mean(self, params_list):
+    def compute_mean(self, params_list: Sequence[Array]):
         # Use tree_map to compute the mean across all corresponding elements
         return jax.tree_util.tree_map(
             lambda *arrays: jnp.mean(jnp.stack(arrays), axis=0)
@@ -117,8 +130,6 @@ class RRM(Optimizer[Y], Generic[Y]):
         history_grads = []
         j = 0
         while total_diff > self.tol:
-            lr = self.lr * (0.9**j)
-
             grads = grad(lambda params: jnp.mean(self.loss_fn(params, x, y)))(
                 self.current_params
             )

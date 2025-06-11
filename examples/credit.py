@@ -21,7 +21,7 @@ from performative_gym import (
     PerfGDReinforce,
     PerfGDReparam,
 )
-from performative_gym.logger import Logger
+from performative_gym.logger import Log, Logger
 from performative_gym.utils import acc_fn, initialize_params, weight_norm
 
 jax.config.update("jax_enable_x64", True)
@@ -134,7 +134,7 @@ class Credit:
             name=optimizer_name
             + f"_model_{self.model}_{self.base_optimizer}_M{self.momentum}_S{self.rho}_{self.seed}",
             config=asdict(self),
-            upload=self.log_wandb,
+            log_type=Log.WANDB if self.log_wandb else Log.OFFLINE,
         )
 
         try:

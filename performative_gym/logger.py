@@ -1,7 +1,15 @@
+from enum import Enum, auto
 from typing import Any
 import os
 import wandb
 import json
+
+__all__ = ["Logger", "Log"]
+
+
+class Log(Enum):
+    OFFLINE = auto()
+    WANDB = auto()
 
 
 class Logger:
@@ -11,42 +19,46 @@ class Logger:
         group: str,
         config: dict[str, Any],
         name: str,
-        upload: bool = True,
+        log_type: Log = Log.WANDB,
     ):
-        self.upload = upload
+        self.log_type = log_type
 
-        if self.upload:
-            wandb.init(project=project, group=group, name=name, config=config)
-            self.config = wandb.config
-        else:
-            self.save_dir = os.path.join("data", group, name + ".json")
-            self.config = config
-            self.data = {}
-            if not os.path.exists(os.path.join("data", group)):
-                os.mkdir(os.path.join("data", group))
+        match log_type:
+            case Log.WANDB:
+                wandb.init(project=project, group=group, name=name, config=config)
+                self.config = wandb.config
+            case Log.OFFLINE:
+                self.save_dir = os.path.join("data", group, name + ".json")
+                self.config = config
+                self.data = {}
+                if not os.path.exists(os.path.join("data", group)):
+                    os.mkdir(os.path.join("data", group))
 
     def update_config(self, config: dict[str, Any]) -> None:
-        if self.upload:
-            wandb.config.update(config)
-            self.config = wandb.config
-        else:
-            self.config |= config
+        match self.log_type:
+            case Log.WANDB:
+                wandb.config.update(config)
+                self.config = wandb.config
+            case Log.OFFLINE:
+                self.config |= config
 
     def finish(self) -> None:
-        if self.upload:
-            wandb.finish()
-        else:
-            with open(self.save_dir, "w") as json_file:
-                # Dump the dictionary into the file in JSON format
-                json.dump(self.data, json_file, indent=4)
-            # pd.DataFrame(self.data).to_csv(self.save_dir, index=False)
+        match self.log_type:
+            case Log.WANDB:
+                wandb.finish()
+            case Log.OFFLINE:
+                with open(self.save_dir, "w") as json_file:
+                    # Dump the dictionary into the file in JSON format
+                    json.dump(self.data, json_file, indent=4)
+                # pd.DataFrame(self.data).to_csv(self.save_dir, index=False)
 
     def log(self, data: dict[str, Any]) -> None:
-        if self.upload:
-            wandb.log(data)
-        else:
-            for key, value in data.items():
-                if key in self.data.keys():
-                    self.data[key].append(value)
-                else:
-                    self.data[key] = [value]
+        match self.log_type:
+            case Log.WANDB:
+                wandb.log(data)
+            case Log.OFFLINE:
+                for key, value in data.items():
+                    if key in self.data.keys():
+                        self.data[key].append(value)
+                    else:
+                        self.data[key] = [value]

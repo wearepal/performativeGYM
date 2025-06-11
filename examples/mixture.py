@@ -21,7 +21,7 @@ from performative_gym import (
     PerfGDReinforce,
     PerfGDReparam,
 )
-from performative_gym.logger import Logger
+from performative_gym.logger import Log, Logger
 from performative_gym.utils import initialize_params, loss_values
 
 
@@ -109,7 +109,7 @@ class Mixture:
             group="landscape",
             name="mixture",
             config=asdict(self),
-            upload=self.log_wandb,
+            log_type=Log.WANDB if self.log_wandb else Log.OFFLINE,
         )
         x = np.arange(-1, 1.01, 0.01)
         y = np.arange(-1, 1.01, 0.01)
@@ -119,7 +119,7 @@ class Mixture:
         logger.log(
             {
                 "landscape": wandb.Table(data=landscape)
-                if logger.upload
+                if logger.log_type is Log.WANDB
                 else np.array(landscape).tolist(),
                 "x": x.tolist(),
                 "y": y.tolist(),
@@ -135,7 +135,7 @@ class Mixture:
             group="mixture",
             name=f"{optimizer_name}_{self.seed}",
             config=asdict(self),
-            upload=self.log_wandb,
+            log_type=Log.WANDB if self.log_wandb else Log.OFFLINE,
         )
 
         try:

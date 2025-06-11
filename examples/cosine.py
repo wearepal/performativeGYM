@@ -1,29 +1,29 @@
+import time
 from dataclasses import asdict, dataclass
 from functools import cached_property
-import time
 
 import jax
-from jax import Array, grad
 import jax.numpy as jnp
-from jax.typing import ArrayLike
 import numpy as np
-from tqdm import tqdm
 import tyro
+import wandb
+from jax import Array, grad
+from jax.typing import ArrayLike
+from tqdm import tqdm
 
 from performative_gym import (
-    DPerfGD,
-    PerfGDReparam,
-    PerfGDReinforce,
+    DFO,
     RGD,
     RRM,
+    DPerfGD,
     Optimizer,
     Optimizers,
+    PerfGDReinforce,
+    PerfGDReparam,
     RegRRM,
-    DFO,
 )
+from performative_gym.logger import Log, Logger
 from performative_gym.utils import initialize_params, loss_values
-from performative_gym.logger import Logger
-import wandb
 
 
 @dataclass
@@ -96,7 +96,7 @@ class Cosine:
             group="landscape",
             name="cosine",
             config=asdict(self),
-            upload=self.log_wandb,
+            log_type=Log.WANDB if self.log_wandb else Log.OFFLINE,
         )
         x = np.arange(-3 / 2 * jnp.pi, 3 / 2 * jnp.pi, 0.01)
         y = np.arange(-3 / 2 * jnp.pi, 3 / 2 * jnp.pi, 0.01)
@@ -106,7 +106,7 @@ class Cosine:
         logger.log(
             {
                 "landscape": wandb.Table(data=landscape)
-                if logger.upload
+                if logger.log_type is Log.WANDB
                 else np.array(landscape).tolist(),
                 "x": x.tolist(),
                 "y": y.tolist(),
@@ -123,7 +123,7 @@ class Cosine:
             name=f"{optimizer_name}"
             + f"_{self.base_optimizer}_{self.momentum}_{self.seed}",
             config=asdict(self),
-            upload=self.log_wandb,
+            log_type=Log.WANDB if self.log_wandb else Log.OFFLINE,
         )
 
         try:

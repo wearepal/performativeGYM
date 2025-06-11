@@ -21,7 +21,7 @@ from performative_gym import (
     PerfGDReinforce,
     PerfGDReparam,
 )
-from performative_gym.logger import Logger
+from performative_gym.logger import Log, Logger
 from performative_gym.utils import initialize_params, loss_values, weight_norm
 
 jax.config.update("jax_enable_x64", True)
@@ -101,7 +101,7 @@ class Pricing:
             group="landscape",
             name="pricing",
             config=asdict(self),
-            upload=self.log_wandb,
+            log_type=Log.WANDB if self.log_wandb else Log.OFFLINE,
         )
         x = np.arange(0, 5.01, 0.01)
         x = x.reshape(x.shape[0], 1)
@@ -113,7 +113,7 @@ class Pricing:
         logger.log(
             {
                 "landscape": wandb.Table(data=landscape)
-                if logger.upload
+                if logger.log_type is Log.WANDB
                 else np.array(landscape).tolist(),
                 "x": x.tolist(),
                 "y": y.tolist(),
@@ -135,7 +135,7 @@ class Pricing:
             group="pricing_grads",
             name=optimizer_name + f"_{self.d}d_{self.seed}",
             config=asdict(self),
-            upload=self.log_wandb,
+            log_type=Log.WANDB if self.log_wandb else Log.OFFLINE,
         )
         try:
             params = self.init_model()
