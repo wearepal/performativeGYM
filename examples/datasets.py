@@ -5,8 +5,9 @@ import os
 import jax
 import numpy as np
 from numpy import typing as npt
-import pandas as pd  # type: ignore
-from sklearn import preprocessing  # type: ignore
+import pandas as pd
+from sklearn import preprocessing
+
 
 class CreditDataset:
     """Class to lazily load the credit dataset."""
@@ -41,18 +42,16 @@ class CreditDataset:
 
         # add bias term
         features = np.append(features, np.ones((features.shape[0], 1)), axis=1)
-        outcomes = np.array(data["SeriousDlqin2yrs"]) #120000 samples
+        outcomes = np.array(data["SeriousDlqin2yrs"])  # 120000 samples
 
         # balance classes
-        default_indices = np.where((outcomes == 1))[0] #8000
-        other_indices = np.where((outcomes == 0))[0][:len(default_indices)] # 112000
+        default_indices = np.where((outcomes == 1))[0]  # 8000
+        other_indices = np.where((outcomes == 0))[0][: len(default_indices)]  # 112000
         indices = np.concatenate((default_indices, other_indices))
-        #indices = np.arange(outcomes.shape[0])
+        # indices = np.arange(outcomes.shape[0])
 
         features_balanced = features[indices]
         outcomes_balanced = outcomes[indices]
-
-        shape = features_balanced.shape
 
         # shuffle arrays
         shuffled = jax.random.permutation(key, len(indices))

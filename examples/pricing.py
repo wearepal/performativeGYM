@@ -1,22 +1,33 @@
+import time
 from dataclasses import asdict, dataclass
 from functools import cached_property
-import time
 
 import jax
-from jax import Array
 import jax.numpy as jnp
+import numpy as np
+import tyro
+import wandb
+from jax import Array
 from jax.typing import ArrayLike
 from tqdm.auto import tqdm
-import tyro
 
-from optimizers import DPerfGD, PerfGDReparam, PerfGDReinforce, RGD, RRM, DFO, Optimizer, Optimizers
-from examples.utils import initialize_params, loss_values, weight_norm
-from examples.logger import Logger
-import wandb
-import numpy as np
+from performative_gym import (
+    DFO,
+    RGD,
+    RRM,
+    DPerfGD,
+    Optimizer,
+    Optimizers,
+    PerfGDReinforce,
+    PerfGDReparam,
+)
+from performative_gym.logger import Logger
+from performative_gym.utils import initialize_params, loss_values, weight_norm
+
 jax.config.update("jax_enable_x64", True)
 
 from jax import grad
+
 
 @dataclass
 class Pricing:
@@ -29,13 +40,15 @@ class Pricing:
     d: int = 100
     iterations: int = 100
     seed: int = 0
-    optimizer: Optimizers = 'RGD'
+    optimizer: Optimizers = "RGD"
     lr: float = 0.1
     log_wandb: bool = False
 
     @cached_property
     def mu_0(self) -> Array:
-        return self.mu0 * jnp.ones((self.d)) + jax.random.uniform(jax.random.PRNGKey(3), (self.d,))
+        return self.mu0 * jnp.ones((self.d)) + jax.random.uniform(
+            jax.random.PRNGKey(3), (self.d,)
+        )
 
     @cached_property
     def cov(self) -> Array:
@@ -84,40 +97,54 @@ class Pricing:
 
     def log_decoupled_landscape(self):
         logger = Logger(
-            project="decoupled-loss", group="landscape", name='pricing', config=asdict(self), upload=self.log_wandb
+            project="decoupled-loss",
+            group="landscape",
+            name="pricing",
+            config=asdict(self),
+            upload=self.log_wandb,
         )
         x = np.arange(0, 5.01, 0.01)
         x = x.reshape(x.shape[0], 1)
         y = np.arange(0, 5.01, 0.01)
         y = y.reshape(y.shape[0], 1)
-        landscape = loss_values(self.shift_data_distribution, self.loss_fn, self.n, x, y)
-        logger.log({
-            'landscape': wandb.Table(data=landscape) if logger.upload else np.array(landscape).tolist(),
-            'x': x.tolist(),
-            'y': y.tolist()
-        })
+        landscape = loss_values(
+            self.shift_data_distribution, self.loss_fn, self.n, x, y
+        )
+        logger.log(
+            {
+                "landscape": wandb.Table(data=landscape)
+                if logger.upload
+                else np.array(landscape).tolist(),
+                "x": x.tolist(),
+                "y": y.tolist(),
+            }
+        )
         logger.finish()
 
-    '''
+    """
     params = jnp.array([params_opt])
     grad1 = grad(lambda p: decoupled_loss(params, p))(params)
     grad2 = grad(lambda p_p: decoupled_loss(p_p, params))(params)
-    '''
-    def train(
-        self, optimizer_name: Optimizers
-    ) -> tuple[Optimizer, Array]:
+    """
 
+    def train(self, optimizer_name: Optimizers) -> Optimizer:
         start_time = time.time()
 
         logger = Logger(
-            project="PerfGD", group="pricing_grads", name=optimizer_name + f'_{self.d}d_{self.seed}', config=asdict(self), upload=self.log_wandb
+            project="PerfGD",
+            group="pricing_grads",
+            name=optimizer_name + f"_{self.d}d_{self.seed}",
+            config=asdict(self),
+            upload=self.log_wandb,
         )
         try:
             params = self.init_model()
             match optimizer_name:
-                case 'RGD':
-                    optimizer = RGD(params, lr=self.lr, loss_fn=self.loss_fn, proj_fn=self.proj_fn)
-                case 'PerfGDReparam':
+                case "RGD":
+                    optimizer = RGD(
+                        params, lr=self.lr, loss_fn=self.loss_fn, proj_fn=self.proj_fn
+                    )
+                case "PerfGDReparam":
                     optimizer = PerfGDReparam(
                         params,
                         lr=self.lr,
@@ -125,11 +152,15 @@ class Pricing:
                         proj_fn=self.proj_fn,
                         distr_shift=(lambda p: self.shift_data_distribution(p, self.n)),
                     )
-                case 'RRM':
+                case "RRM":
                     optimizer = RRM(
-                        params, lr=self.lr, loss_fn=self.loss_fn, proj_fn=self.proj_fn, tol=0.0001
+                        params,
+                        lr=self.lr,
+                        loss_fn=self.loss_fn,
+                        proj_fn=self.proj_fn,
+                        tol=0.0001,
                     )
-                case 'PerfGDReinforce':
+                case "PerfGDReinforce":
                     optimizer = PerfGDReinforce(
                         params,
                         lr=self.lr,
@@ -139,52 +170,75 @@ class Pricing:
                         H=14,
                         prob_distr=self.prob_distr,
                     )
-                case 'DPerfGD':
+                case "DPerfGD":
                     optimizer = DPerfGD(
                         params,
                         lr=self.lr,
                         loss_fn=self.loss_fn,
                         proj_fn=self.proj_fn,
                         distr_shift=(lambda p: self.shift_data_distribution(p, self.n)),
-                        reg=self.d/25
+                        reg=self.d / 25,
                     )
-                case 'DFO':
+                case "DFO":
                     optimizer = DFO(
                         params,
                         lr=self.lr,
                         loss_fn=self.loss_fn,
                         proj_fn=self.proj_fn,
-                        shift_data_distribution=(lambda params: self.shift_data_distribution(params, self.n)),
-                        seed=self.seed
+                        shift_data_distribution=(
+                            lambda params: self.shift_data_distribution(params, self.n)
+                        ),
+                        seed=self.seed,
                     )
 
                 case _:
-                    print('Optimizer choice unknown')
+                    print("Optimizer choice unknown")
                     exit()
 
             with tqdm(total=self.iterations) as pbar:
                 for i in range(self.iterations):
-                    x, y = self.shift_data_distribution(optimizer.current_p_d, self.n) if optimizer_name=='DPerfGD' else self.shift_data_distribution(params, self.n)
-                    logger.log({
-                        'iteration': i,
-                        'p_d': optimizer.current_p_d.tolist() if optimizer_name=='DPerfGD' else params.tolist(),
-                        'p_m': params.tolist(),
-                        'losses': jnp.mean(self.loss_fn(params, x=x, y=y)).item(),
-                    })
+                    x, y = (
+                        self.shift_data_distribution(optimizer.current_p_d, self.n)
+                        if optimizer_name == "DPerfGD"
+                        else self.shift_data_distribution(params, self.n)
+                    )
+                    logger.log(
+                        {
+                            "iteration": i,
+                            "p_d": optimizer.current_p_d.tolist()
+                            if optimizer_name == "DPerfGD"
+                            else params.tolist(),
+                            "p_m": params.tolist(),
+                            "losses": jnp.mean(self.loss_fn(params, x=x, y=y)).item(),
+                        }
+                    )
 
                     # Perform gradient descent step
                     params = optimizer.step(params, x=x, y=y)
-                    logger.log({
-                        'iteration': i + 1,
-                        'p_d': optimizer.current_p_d.tolist() if optimizer_name=='DPerfGD' else optimizer.params_history[i].tolist(),
-                        'p_m': params.tolist(),
-                        'losses': jnp.mean(self.loss_fn(params, x=x, y=y)).item(),
-                        'dist_params': jnp.linalg.norm(params - self.params_opt).item(),
-                        'grads': weight_norm(grad(lambda p: self.decoupled_loss(p, p))(params)).item(),
-                        'grads_D': weight_norm(grad(lambda p: self.decoupled_loss(p, params))(params)).item(),
-                        'grads_M': weight_norm(grad(lambda p_p: self.decoupled_loss(params, p_p))(params)).item()
-
-                    })
+                    logger.log(
+                        {
+                            "iteration": i + 1,
+                            "p_d": optimizer.current_p_d.tolist()
+                            if optimizer_name == "DPerfGD"
+                            else optimizer.params_history[i].tolist(),
+                            "p_m": params.tolist(),
+                            "losses": jnp.mean(self.loss_fn(params, x=x, y=y)).item(),
+                            "dist_params": jnp.linalg.norm(
+                                params - self.params_opt
+                            ).item(),
+                            "grads": weight_norm(
+                                grad(lambda p: self.decoupled_loss(p, p))(params)
+                            ).item(),
+                            "grads_D": weight_norm(
+                                grad(lambda p: self.decoupled_loss(p, params))(params)
+                            ).item(),
+                            "grads_M": weight_norm(
+                                grad(lambda p_p: self.decoupled_loss(params, p_p))(
+                                    params
+                                )
+                            ).item(),
+                        }
+                    )
 
                     # Compute current loss
                     current_loss = jnp.mean(self.loss_fn(params, x=x, y=y))
@@ -195,22 +249,20 @@ class Pricing:
                             jnp.linalg.norm(params - self.params_opt).item(),
                         )
                     )
-                    '''
+                    """
                     logger.log({
                         'Loss': current_loss.item(),
                         'dist_params': jnp.linalg.norm(params - self.params_opt).item(),
                         'grads': jnp.linalg.norm(optimizer.grads).item(),
                     })
-                    '''
+                    """
                     pbar.update(1)
 
-            #print(f'params: {params}')
-            #print(
+            # print(f'params: {params}')
+            # print(
             #    f'theta_opt: {self.mu_0 / (2 * self.epsilon)}, theta_stab: {self.mu_0 / (self.epsilon)}'
-            #)
-            logger.log({
-                'time': time.time() - start_time
-            })
+            # )
+            logger.log({"time": time.time() - start_time})
 
             return optimizer
 
@@ -218,8 +270,8 @@ class Pricing:
             logger.finish()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     start_time = time.time()
     args = tyro.cli(Pricing, use_underscores=True)
     args.train(optimizer_name=args.optimizer)
-    print(f'non-linear with {args.optimizer} in {time.time() - start_time} s')
+    print(f"non-linear with {args.optimizer} in {time.time() - start_time} s")

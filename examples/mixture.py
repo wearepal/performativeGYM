@@ -1,19 +1,29 @@
+import time
 from dataclasses import asdict, dataclass
 from functools import cached_property
-import time
 
 import jax
-from jax import Array
 import jax.numpy as jnp
-from jax.typing import ArrayLike
 import numpy as np
-from tqdm.auto import tqdm
 import tyro
 import wandb
+from jax import Array
+from jax.typing import ArrayLike
+from tqdm.auto import tqdm
 
-from optimizers import DPerfGD, PerfGDReparam, PerfGDReinforce, RGD, RRM, DFO, Optimizer, Optimizers
-from examples.utils import initialize_params, loss_values
-from examples.logger import Logger
+from performative_gym import (
+    DFO,
+    RGD,
+    RRM,
+    DPerfGD,
+    Optimizer,
+    Optimizers,
+    PerfGDReinforce,
+    PerfGDReparam,
+)
+from performative_gym.logger import Logger
+from performative_gym.utils import initialize_params, loss_values
+
 
 @dataclass
 class Mixture:
@@ -30,7 +40,7 @@ class Mixture:
     n: int = 10000
     iterations: int = 100
     seed: int = 0
-    optimizer: Optimizers = 'RRM'
+    optimizer: Optimizers = "RRM"
     lr: float = 0.1
     log_wandb: bool = False
 
@@ -81,50 +91,69 @@ class Mixture:
         x, y = self.shift_data_distribution(p_p, self.n)
         return jnp.mean(self.loss_fn(p, x=x, y=y))
 
-    '''
+    """
     params = jnp.array([-2/3.])
     grad1 = grad(lambda p: decoupled_loss(params, p))(params)
     grad2 = grad(lambda p_p: decoupled_loss(p_p, params))(params)
-    '''
+    """
 
     def f_fn(self, params: Array, x: Array, y: None) -> Array:
         return jnp.mean(x, axis=0)
 
     def init_model(self):
         return 0.85 + initialize_params((1,), self.seed) * 0.1
+
     def log_decoupled_landscape(self):
         logger = Logger(
-            project="decoupled-loss", group="landscape", name='mixture', config=asdict(self), upload=self.log_wandb
+            project="decoupled-loss",
+            group="landscape",
+            name="mixture",
+            config=asdict(self),
+            upload=self.log_wandb,
         )
         x = np.arange(-1, 1.01, 0.01)
         y = np.arange(-1, 1.01, 0.01)
-        landscape = loss_values(self.shift_data_distribution, self.loss_fn, self.n, x, y)
-        logger.log({
-            'landscape': wandb.Table(data=landscape) if logger.upload else np.array(landscape).tolist(),
-            'x': x.tolist(),
-            'y': y.tolist()
-        })
+        landscape = loss_values(
+            self.shift_data_distribution, self.loss_fn, self.n, x, y
+        )
+        logger.log(
+            {
+                "landscape": wandb.Table(data=landscape)
+                if logger.upload
+                else np.array(landscape).tolist(),
+                "x": x.tolist(),
+                "y": y.tolist(),
+            }
+        )
         logger.finish()
 
-    def train(
-        self, optimizer_name: Optimizers
-    ) -> tuple[Optimizer, float]:
+    def train(self, optimizer_name: Optimizers) -> Optimizer:
         start_time = time.time()
 
         logger = Logger(
-            project="PerfGD", group="mixture", name=f'{optimizer_name}_{self.seed}', config=asdict(self), upload=self.log_wandb
+            project="PerfGD",
+            group="mixture",
+            name=f"{optimizer_name}_{self.seed}",
+            config=asdict(self),
+            upload=self.log_wandb,
         )
 
         try:
             params = self.init_model()
             match optimizer_name:
-                case 'RGD':
-                    optimizer = RGD(params, lr=self.lr, loss_fn=self.loss_fn, proj_fn=self.proj_fn)
-                case 'RRM':
-                    optimizer = RRM(
-                        params, lr=self.lr, loss_fn=self.loss_fn, proj_fn=self.proj_fn, tol=0.0001
+                case "RGD":
+                    optimizer = RGD(
+                        params, lr=self.lr, loss_fn=self.loss_fn, proj_fn=self.proj_fn
                     )
-                case 'PerfGDReinforce':
+                case "RRM":
+                    optimizer = RRM(
+                        params,
+                        lr=self.lr,
+                        loss_fn=self.loss_fn,
+                        proj_fn=self.proj_fn,
+                        tol=0.0001,
+                    )
+                case "PerfGDReinforce":
                     optimizer = PerfGDReinforce(
                         params,
                         lr=self.lr,
@@ -134,7 +163,7 @@ class Mixture:
                         H=4,
                         prob_distr=self.prob_distr,
                     )
-                case 'PerfGDReparam':
+                case "PerfGDReparam":
                     optimizer = PerfGDReparam(
                         params,
                         lr=self.lr,
@@ -142,7 +171,7 @@ class Mixture:
                         proj_fn=self.proj_fn,
                         distr_shift=(lambda p: self.shift_data_distribution(p, self.n)),
                     )
-                case 'DPerfGD':
+                case "DPerfGD":
                     optimizer = DPerfGD(
                         params,
                         lr=self.lr,
@@ -150,22 +179,23 @@ class Mixture:
                         proj_fn=self.proj_fn,
                         distr_shift=(lambda p: self.shift_data_distribution(p, self.n)),
                     )
-                case 'DFO':
+                case "DFO":
                     optimizer = DFO(
                         params,
                         lr=self.lr,
                         loss_fn=self.loss_fn,
                         proj_fn=self.proj_fn,
-                        shift_data_distribution=(lambda params: self.shift_data_distribution(params, self.n)),
-                        seed=self.seed
+                        shift_data_distribution=(
+                            lambda params: self.shift_data_distribution(params, self.n)
+                        ),
+                        seed=self.seed,
                     )
 
-
                 case _:
-                    print('Optimizer choice unknown')
+                    print("Optimizer choice unknown")
                     exit()
 
-            '''
+            """
             fig = plt.figure()
             ax = fig.add_subplot(111, projection='3d')
             surf = ax.plot_surface(np.arange(-1, 1.01, 0.01), np.arange(-1, 1.01, 0.01),
@@ -173,25 +203,29 @@ class Mixture:
                                    linewidth=0, antialiased=False, cmap='viridis')
             fig.colorbar(surf)
             plt.show()
-            '''
+            """
             with tqdm(total=self.iterations) as pbar:
                 for i in range(self.iterations):
                     x, y = self.shift_data_distribution(params, self.n)
                     # Perform gradient descent step
-                    logger.log({
-                        'iteration': i,
-                        'p_d': params.item(),
-                        'p_m': params.item(),
-                        'losses': jnp.mean(self.loss_fn(params, x=x, y=y)).item()
-                    })
+                    logger.log(
+                        {
+                            "iteration": i,
+                            "p_d": params.item(),
+                            "p_m": params.item(),
+                            "losses": jnp.mean(self.loss_fn(params, x=x, y=y)).item(),
+                        }
+                    )
 
                     params = optimizer.step(params, x=x, y=y)
-                    logger.log({
-                        'iteration': i + 1,
-                        'p_d': optimizer.params_history[i].item(),
-                        'p_m': params.item(),
-                        'losses': jnp.mean(self.loss_fn(params, x=x, y=y)).item()
-                    })
+                    logger.log(
+                        {
+                            "iteration": i + 1,
+                            "p_d": optimizer.params_history[i].item(),
+                            "p_m": params.item(),
+                            "losses": jnp.mean(self.loss_fn(params, x=x, y=y)).item(),
+                        }
+                    )
 
                     # Compute current loss
                     current_loss = jnp.mean(self.loss_fn(params, x=x, y=y))
@@ -205,9 +239,7 @@ class Mixture:
                     )
 
                     pbar.update(1)
-            logger.log({
-                'time': time.time() - start_time
-            })
+            logger.log({"time": time.time() - start_time})
 
             return optimizer
 
@@ -215,8 +247,8 @@ class Mixture:
             logger.finish()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     start_time = time.time()
     args = tyro.cli(Mixture, use_underscores=True)
     args.train(optimizer_name=args.optimizer)
-    print(f'non-linear with {args.optimizer} in {time.time() - start_time} s')
+    print(f"non-linear with {args.optimizer} in {time.time() - start_time} s")

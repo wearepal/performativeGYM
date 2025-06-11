@@ -1,0 +1,51 @@
+[project]
+name = "performative_gym"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "jax>=0.6.1",
+    "neural-tangents>=0.5.0",
+    "optax>=0.2.5",
+    "pandas>=2.3.0",
+    "scikit-learn>=1.7.0",
+    "tqdm>=4.67.1",
+    "tyro>=0.9.24",
+]
+
+[project.optional-dependencies]
+wandb = ["wandb>=0.20.1"]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.pyright]
+typeCheckingMode = "strict"
+pythonVersion = "3.11"
+venvPath = "."
+venv = ".venv"
+reportMissingTypeArgument = "none"
+reportUnnecessaryComparison = "none"
+reportCallInDefaultInitializer = "warning"
+reportPropertyTypeMismatch = "warning"
+reportUninitializedInstanceVariable = "warning"
+reportPrivateUsage = "warning"
+reportUnnecessaryTypeIgnoreComment = "warning"
+reportConstantRedefinition = "warning"
+# these errors are a bit annoying
+reportUnknownMemberType = "none"
+reportUnknownVariableType = "none"
+reportUnknownParameterType = "none"
+reportUnknownArgumentType = "none"
+reportUnknownLambdaType = "none"
+
+[tool.uv.sources]
+python-type-stubs = { git = "https://github.com/wearepal/python-type-stubs.git", rev = "8d5f608" }
+
+[dependency-groups]
+dev = [
+    "pandas-stubs>=2.2.3.250527",
+    "python-type-stubs",
+]
