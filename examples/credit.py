@@ -203,7 +203,9 @@ class Credit:
                 case _:
                     print("Optimizer choice unknown")
                     exit()
-            logger.log({"p_o": jax.tree_util.tree_map(lambda x: x.tolist(), params)})
+            logger.log(
+                {"p_o": jax.tree_util.tree_map(lambda x: x.tolist(), params)}, step=0
+            )
             with tqdm(total=self.iterations) as pbar:
                 for i in range(self.iterations):
                     x, y = (
@@ -230,7 +232,8 @@ class Credit:
                                     params
                                 )
                             ).item(),
-                        }
+                        },
+                        step=i,
                     )
 
                     """
@@ -249,8 +252,10 @@ class Credit:
                     # print(f'Iteration {i+1} - loss: {current_loss:.4f} params: {params} ')
                     pbar.update(1)
 
-            logger.log({"time": time.time() - start_time})
-            logger.log({"p_f": jax.tree_util.tree_map(lambda x: x.tolist(), params)})
+            logger.log({"time": time.time() - start_time}, step=0)
+            logger.log(
+                {"p_f": jax.tree_util.tree_map(lambda x: x.tolist(), params)}, step=0
+            )
 
             return optimizer
 

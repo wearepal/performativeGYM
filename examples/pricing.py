@@ -117,7 +117,8 @@ class Pricing:
                 else np.array(landscape).tolist(),
                 "x": x.tolist(),
                 "y": y.tolist(),
-            }
+            },
+            step=0,
         )
         logger.finish()
 
@@ -210,7 +211,8 @@ class Pricing:
                             else params.tolist(),
                             "p_m": params.tolist(),
                             "losses": jnp.mean(self.loss_fn(params, x=x, y=y)).item(),
-                        }
+                        },
+                        step=i,
                     )
 
                     # Perform gradient descent step
@@ -237,7 +239,8 @@ class Pricing:
                                     params
                                 )
                             ).item(),
-                        }
+                        },
+                        step=i,
                     )
 
                     # Compute current loss
@@ -262,7 +265,7 @@ class Pricing:
             # print(
             #    f'theta_opt: {self.mu_0 / (2 * self.epsilon)}, theta_stab: {self.mu_0 / (self.epsilon)}'
             # )
-            logger.log({"time": time.time() - start_time})
+            logger.log({"time": time.time() - start_time}, step=0)
 
             return optimizer
 

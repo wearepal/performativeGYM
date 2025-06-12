@@ -69,7 +69,7 @@ class Logger:
                 import mlflow
                 mlflow.end_run()
 
-    def log(self, data: dict[str, Any]) -> None:
+    def log(self, data: dict[str, Any], step: int) -> None:
         match self.log_type:
             case Log.WANDB:
                 wandb.log(data)
@@ -81,7 +81,7 @@ class Logger:
                         self.data[key] = [value]
             case Log.ML_FLOW:
                 import mlflow
-                mlflow.log_metrics(data)
+                mlflow.log_metrics(data, step=step)
 
     def log_table(self, name: str, value: Any) -> None:
         match self.log_type:

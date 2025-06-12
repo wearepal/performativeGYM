@@ -123,7 +123,8 @@ class Mixture:
                 else np.array(landscape).tolist(),
                 "x": x.tolist(),
                 "y": y.tolist(),
-            }
+            },
+            step=0,
         )
         logger.finish()
 
@@ -214,7 +215,8 @@ class Mixture:
                             "p_d": params.item(),
                             "p_m": params.item(),
                             "losses": jnp.mean(self.loss_fn(params, x=x, y=y)).item(),
-                        }
+                        },
+                        step=i,
                     )
 
                     params = optimizer.step(params, x=x, y=y)
@@ -224,7 +226,8 @@ class Mixture:
                             "p_d": optimizer.params_history[i].item(),
                             "p_m": params.item(),
                             "losses": jnp.mean(self.loss_fn(params, x=x, y=y)).item(),
-                        }
+                        },
+                        step=i,
                     )
 
                     # Compute current loss
@@ -239,7 +242,7 @@ class Mixture:
                     )
 
                     pbar.update(1)
-            logger.log({"time": time.time() - start_time})
+            logger.log({"time": time.time() - start_time}, step=0)
 
             return optimizer
 

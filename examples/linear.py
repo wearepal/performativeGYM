@@ -102,7 +102,7 @@ class Linear:
         landscape = loss_values(
             self.shift_data_distribution, self.loss_fn, self.n, x, y
         )
-        logger.log({"x": x.tolist(), "y": y.tolist()})
+        logger.log({"x": x.tolist(), "y": y.tolist()}, step=0)
         logger.log_table("landscape", landscape)
         logger.finish()
 
@@ -198,7 +198,8 @@ class Linear:
                             "losses": jnp.mean(
                                 self.loss_fn(params, x=z, y=None)
                             ).item(),
-                        }
+                        },
+                        step=i,
                     )
                     # Perform gradient descent step
                     params = optimizer.step(params, x=z, y=None)
@@ -211,7 +212,8 @@ class Linear:
                             "losses": jnp.mean(
                                 self.loss_fn(params, x=z, y=None)
                             ).item(),
-                        }
+                        },
+                        step=i,
                     )
                     current_loss = jnp.mean(self.loss_fn(params, x=z, y=None))
                     losses.append(current_loss)
@@ -232,7 +234,7 @@ class Linear:
                     # print(f'Iteration {i+1} - loss: {current_loss:.4f} params: {params} ')
                     pbar.update(1)
 
-            logger.log({"time": time.time() - start_time})
+            logger.log({"time": time.time() - start_time}, step=0)
             return optimizer
 
         finally:

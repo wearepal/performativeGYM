@@ -110,7 +110,8 @@ class Cosine:
                 else np.array(landscape).tolist(),
                 "x": x.tolist(),
                 "y": y.tolist(),
-            }
+            },
+            step=0,
         )
         logger.finish()
 
@@ -208,7 +209,8 @@ class Cosine:
                             "losses": jnp.mean(
                                 self.loss_fn(params, x=z, y=None)
                             ).item(),
-                        }
+                        },
+                        step=i,
                     )
                     # Perform gradient descent step
                     params = optimizer.step(params, x=z, y=None)
@@ -232,7 +234,8 @@ class Cosine:
                                     params
                                 )
                             ).item(),
-                        }
+                        },
+                        step=i,
                     )
                     current_loss = jnp.mean(self.loss_fn(params, x=z, y=None))
                     losses.append(current_loss)
@@ -253,7 +256,7 @@ class Cosine:
                     # print(f'Iteration {i+1} - loss: {current_loss:.4f} params: {params} ')
                     pbar.update(1)
 
-            logger.log({"time": time.time() - start_time})
+            logger.log({"time": time.time() - start_time}, step=0)
             return optimizer
 
         finally:
