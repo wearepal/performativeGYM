@@ -16,10 +16,20 @@ dependencies = [
 
 [project.optional-dependencies]
 wandb = ["wandb>=0.20.1"]
+mlflow = ["databricks-sdk>=0.56.0", "mlflow>=3.1.0"]
 
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["performative_gym"]
+
+[tool.uv.sources]
+python-type-stubs = { git = "https://github.com/wearepal/python-type-stubs.git", rev = "8d5f608" }
+
+[dependency-groups]
+dev = ["pandas-stubs>=2.2.3.250527", "python-type-stubs"]
 
 [tool.pyright]
 typeCheckingMode = "strict"
@@ -40,12 +50,3 @@ reportUnknownVariableType = "none"
 reportUnknownParameterType = "none"
 reportUnknownArgumentType = "none"
 reportUnknownLambdaType = "none"
-
-[tool.uv.sources]
-python-type-stubs = { git = "https://github.com/wearepal/python-type-stubs.git", rev = "8d5f608" }
-
-[dependency-groups]
-dev = [
-    "pandas-stubs>=2.2.3.250527",
-    "python-type-stubs",
-]
