@@ -2,7 +2,6 @@ from enum import Enum, auto
 from typing import Any
 import os
 import wandb
-import mlflow
 import json
 
 __all__ = ["Logger", "Log"]
@@ -36,6 +35,7 @@ class Logger:
                 if not os.path.exists(os.path.join("data", group)):
                     os.mkdir(os.path.join("data", group))
             case Log.ML_FLOW:
+                import mlflow
                 mlflow.set_experiment(project)
                 mlflow.start_run(run_name=name)
                 mlflow.log_params(config)
@@ -48,6 +48,7 @@ class Logger:
             case Log.OFFLINE:
                 self.config.update(config)
             case Log.ML_FLOW:
+                import mlflow
                 mlflow.log_params(config)
                 self.config.update(config)
 
@@ -61,6 +62,7 @@ class Logger:
                     json.dump(self.data, json_file, indent=4)
                 # pd.DataFrame(self.data).to_csv(self.save_dir, index=False)
             case Log.ML_FLOW:
+                import mlflow
                 mlflow.end_run()
 
     def log(self, data: dict[str, Any]) -> None:
@@ -74,4 +76,5 @@ class Logger:
                     else:
                         self.data[key] = [value]
             case Log.ML_FLOW:
+                import mlflow
                 mlflow.log_metrics(data)
