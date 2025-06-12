@@ -6,7 +6,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import tyro
-import wandb
 from jax import Array
 from jax.typing import ArrayLike
 from tqdm.auto import tqdm
@@ -103,15 +102,8 @@ class Linear:
         landscape = loss_values(
             self.shift_data_distribution, self.loss_fn, self.n, x, y
         )
-        logger.log(
-            {
-                "landscape": wandb.Table(data=landscape)
-                if logger.log_type is Log.WANDB
-                else np.array(landscape).tolist(),
-                "x": x.tolist(),
-                "y": y.tolist(),
-            }
-        )
+        logger.log({"x": x.tolist(), "y": y.tolist()})
+        logger.log_table("landscape", landscape)
         logger.finish()
 
     def train(self, optimizer_name: Optimizers) -> Optimizer:
@@ -119,7 +111,8 @@ class Linear:
 
         logger = Logger(
             project="PerfGD",
-            group="nonlinear",
+            # project="/Users/<email>/PerfGD",  # for mlflow
+            group="linear",
             name=f"{optimizer_name}_{self.seed}",
             config=asdict(self),
             log_type=Log.WANDB if self.log_wandb else Log.OFFLINE,

@@ -1,8 +1,10 @@
+import json
+import os
 from enum import Enum, auto
 from typing import Any
-import os
+
+import numpy as np
 import wandb
-import json
 
 __all__ = ["Logger", "Log"]
 
@@ -36,8 +38,10 @@ class Logger:
                     os.mkdir(os.path.join("data", group))
             case Log.ML_FLOW:
                 import mlflow
+                mlflow.login()
                 mlflow.set_experiment(project)
                 mlflow.start_run(run_name=name)
+                mlflow.set_tag("group", group)
                 mlflow.log_params(config)
 
     def update_config(self, config: dict[str, Any]) -> None:
@@ -78,3 +82,18 @@ class Logger:
             case Log.ML_FLOW:
                 import mlflow
                 mlflow.log_metrics(data)
+
+    def log_table(self, name: str, value: Any) -> None:
+        match self.log_type:
+            case Log.WANDB:
+                wandb.log({name: wandb.Table(data=value)})
+            case Log.OFFLINE:
+                value = np.array(value).tolist()
+                key = name
+                if key in self.data.keys():
+                    self.data[key].append(value)
+                else:
+                    self.data[key] = [value]
+            case Log.ML_FLOW:
+                import mlflow
+                mlflow.log_table({name: value}, artifact_file=name + ".json")
