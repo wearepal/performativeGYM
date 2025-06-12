@@ -26,10 +26,13 @@ build-backend = "setuptools.build_meta"
 packages = ["performative_gym"]
 
 [tool.uv.sources]
-python-type-stubs = { git = "https://github.com/wearepal/python-type-stubs.git", rev = "8d5f608" }
+microsoft-python-type-stubs = { git = "https://github.com/microsoft/python-type-stubs.git", rev = "76ca370" }
 
 [dependency-groups]
-dev = ["pandas-stubs>=2.2.3.250527", "python-type-stubs"]
+dev = [
+    "microsoft-python-type-stubs",
+    "pandas-stubs>=2.2.3.250527",
+]
 
 [tool.pyright]
 typeCheckingMode = "strict"

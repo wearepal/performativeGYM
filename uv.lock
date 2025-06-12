@@ -800,6 +800,11 @@ wheels = [
 ]
 
 [[package]]
+name = "microsoft-python-type-stubs"
+version = "0"
+source = { git = "https://github.com/microsoft/python-type-stubs.git?rev=76ca370#76ca3704d162cf76920f5871d82cbc3831372e31" }
+
+[[package]]
 name = "ml-dtypes"
 version = "0.5.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1137,8 +1142,8 @@ wandb = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "microsoft-python-type-stubs" },
     { name = "pandas-stubs" },
-    { name = "python-type-stubs" },
 ]
 
 [package.metadata]
@@ -1158,8 +1163,8 @@ provides-extras = ["wandb", "mlflow"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "microsoft-python-type-stubs", git = "https://github.com/microsoft/python-type-stubs.git?rev=76ca370" },
     { name = "pandas-stubs", specifier = ">=2.2.3.250527" },
-    { name = "python-type-stubs", git = "https://github.com/wearepal/python-type-stubs.git?rev=8d5f608" },
 ]
 
 [[package]]
@@ -1393,11 +1398,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/66/c0/0c8b6ad9f17a802ee
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl", hash = "sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427", size = 229892, upload-time = "2024-03-01T18:36:18.57Z" },
 ]
-
-[[package]]
-name = "python-type-stubs"
-version = "0.1.6.dev0"
-source = { git = "https://github.com/wearepal/python-type-stubs.git?rev=8d5f608#8d5f6089b412f1e013e0bf90bdd14c4a0fb11e6d" }
 
 [[package]]
 name = "pytz"
