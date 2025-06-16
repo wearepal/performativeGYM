@@ -445,7 +445,7 @@ class DPerfGD(Optimizer[Y], Generic[Y]):  # Decoupled Gradient Descent
         current_p_d = optax.apply_updates(self.current_p_d, updates_D)
         self.current_p_d = cast(Array, current_p_d)
 
-        self.grads = grad_M + grad_D
+        self.grads = jax.tree_util.tree_map(lambda x, y: x + y, grad_M, grad_D)
         self.params_history.append(self.current_params)
         self.p_d_history.append(self.current_p_d)
         self.i += 1
