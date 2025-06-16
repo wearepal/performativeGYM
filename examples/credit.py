@@ -1,9 +1,11 @@
 import time
 from dataclasses import asdict, dataclass
+from typing import Union
 
 import jax
 import jax.numpy as jnp
-import neural_tangents as nt
+import haiku as hk
+from haiku.typing import MutableParams
 import tyro
 from jax import Array, grad
 from jax.typing import ArrayLike
@@ -65,32 +67,27 @@ class Credit:
     def accuracy(self, params: Array, x: Array, y) -> Array:
         return acc_fn(jax.nn.sigmoid(self.h(params, x)), y)
 
-    def init_model(self) -> Array:
+    def init_model(self) -> Array | MutableParams:
         if self.model == "NN":
-            layers = [
-                layer
-                for _ in range(1)
-                for layer in [
-                    nt.stax.Dense(100, W_std=1, b_std=None),
-                    nt.stax.Relu(),
-                    # nt.stax.Dense(100, W_std=1, b_std=None),
-                    # nt.stax.Relu(),
-                ]
-            ]
-            layers += [nt.stax.Dense(1, W_std=1, b_std=None)]
-            init_fn, self.f, _ = nt.stax.serial(*layers)
-            _, params = init_fn(jax.random.PRNGKey(self.seed), (1, 11))
-            self.h = lambda params, x: jnp.squeeze(self.f(params, x))
+            def forward(x: Array) -> Array:
+                mlp = hk.Sequential([hk.Linear(100), jax.nn.relu, hk.Linear(1)])
+                return mlp(x).squeeze()
+            model = hk.without_apply_rng(hk.transform(forward))
+            self.h = jax.jit(model.apply)
+            params = model.init(jax.random.PRNGKey(self.seed), jnp.zeros((1, 11)))
             return params
         if self.model == "logistic_regression":
             self.h = lambda params, x: x @ params
             return initialize_params((11,), self.seed)
+
         raise NotImplementedError("Model not implemented: {}".format(self.model))
 
     def proj_fn(self, params: Array) -> Array:
-        norm = jnp.linalg.norm(params, ord=2)  # Compute L2 norm of theta
-        scale = jnp.minimum(1.0, 10.0 / norm)  # Scale factor to enforce constraint
-        return params * scale
+        def fn(x: Array) -> Array:
+            norm = jnp.linalg.norm(x, ord=2)  # Compute L2 norm of theta
+            scale = jnp.minimum(1.0, 10.0 / norm)  # Scale factor to enforce constraint
+            return x * scale
+        return jax.tree_util.tree_map(fn, params)
 
     def shift_data_distribution(
         self, params: Array, n: int
