@@ -67,7 +67,7 @@ class Credit:
     def accuracy(self, params: Array, x: Array, y) -> Array:
         return acc_fn(jax.nn.sigmoid(self.h(params, x)), y)
 
-    def init_model(self) -> Union[Array, MutableParams]:
+    def init_model(self) -> Array | MutableParams:
         if self.model == "NN":
             def forward(x: Array) -> Array:
                 mlp = hk.Sequential([hk.Linear(100), jax.nn.relu, hk.Linear(1)])
