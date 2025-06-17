@@ -9,6 +9,7 @@ import jax
 import optax
 
 __all__ = [
+    "BaseOptimizer",
     "DFO",
     "DPerfGD",
     "Objective",
@@ -32,6 +33,7 @@ Optimizers: TypeAlias = Literal[
     "DFO",
 ]
 Objective: TypeAlias = Literal["stability", "optimality"]
+BaseOptimizer: TypeAlias = Literal["GD", "adam", "adamw", "adagrad"]
 Y = TypeVar("Y", contravariant=True, bound=Array | None)
 
 
@@ -70,7 +72,7 @@ class RGD(Optimizer[Y], Generic[Y]):
         lr: float,
         loss_fn: LossFn[Y],
         proj_fn: Callable[[Array], Array] = (lambda params: params),
-        base_optimizer: str = "GD",
+        base_optimizer: BaseOptimizer = "GD",
         momentum: float = 0,
     ):
         super().__init__(params, lr, loss_fn, proj_fn)
@@ -324,7 +326,7 @@ class PerfGDReparam(Optimizer[Y], Generic[Y]):  # Especial Gradient Descent
         loss_fn: LossFn[Y],
         proj_fn: Callable[[Array], Array],
         distr_shift: Callable[[Array], tuple[Array, Y]],
-        base_optimizer: str = "GD",
+        base_optimizer: BaseOptimizer = "GD",
         momentum: float = 0,
     ):
         super().__init__(params, lr, loss_fn, proj_fn)
@@ -375,7 +377,7 @@ class DPerfGD(Optimizer[Y], Generic[Y]):  # Decoupled Gradient Descent
         proj_fn: Callable[[Array], Array],
         distr_shift: Callable[[Array], tuple[Array, Y]],
         reg: float = 0,
-        base_optimizer: str = "GD",
+        base_optimizer: BaseOptimizer = "GD",
         momentum: float = 0,
         rho: float = 0,
     ):

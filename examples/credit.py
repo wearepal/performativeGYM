@@ -1,11 +1,10 @@
 import time
 from dataclasses import asdict, dataclass
-from typing import Union
+from typing import Literal
 
+import haiku as hk
 import jax
 import jax.numpy as jnp
-import haiku as hk
-from haiku.typing import MutableParams
 import tyro
 from jax import Array, grad
 from jax.typing import ArrayLike
@@ -24,6 +23,7 @@ from performative_gym import (
     PerfGDReparam,
 )
 from performative_gym.logger import Log, Logger
+from performative_gym.optimizers import BaseOptimizer
 from performative_gym.utils import acc_fn, initialize_params, weight_norm
 
 jax.config.update("jax_enable_x64", True)
@@ -33,60 +33,71 @@ jax.config.update("jax_enable_x64", True)
 
 @dataclass
 class Credit:
-    """Argument parser for configuration options."""
+    """Run the credit experiment with the specified optimizer."""
 
     epsilon: float = 10
-    reg: float = 0
-    n: int = 120000
+    """Epsilon for the data distribution shift; higher values lead to more significant shifts."""
+    n: int = 120_000
+    """Number of samples to use for the experiment; 120,000 is the default size for the credit dataset."""
     iterations: int = 5000
     seed: int = 10
     optimizer: Optimizers = "DPerfGD"
-    base_optimizer: str = "GD"
+    base_optimizer: BaseOptimizer = "GD"
     momentum: float = 0
-    log_wandb: bool = False
+    logging: Literal["offline", "wandb", "mlflow"] = "offline"
     output_file: str = "credit"
-    model: str = "NN"
+    model: Literal["NN", "logistic_regression"] = "NN"
+    """Model type to use for the experiment, either 'NN' for a neural network or 'logistic_regression'."""
     lr: float = 0.1
+    """Learning rate for the optimizer."""
     reg: float = 0
+    """Regularization parameter for the logistic regression model."""
     rho: float = 0
-    dataset: CreditDataset = CreditDataset("credit_data.zip", seed=seed)
+    datafile: str = "credit_data.zip"
+    """Data file containing the credit dataset."""
 
     def loss_fn(self, params: Array, x: Array, y: Array) -> Array:  # Size (n, 1)
-        if self.model == "logistic_regression":
-            return jnp.expand_dims(
-                sigmoid_binary_cross_entropy(self.h(params, x), y)
-                + (self.reg / 2) * jnp.linalg.norm(params) ** 2,
-                axis=1,
-            )
-        else:
-            return jnp.expand_dims(
-                sigmoid_binary_cross_entropy(self.h(params, x), y),
-                axis=1,
-            )
+        match self.model:
+            case "NN":
+                return jnp.expand_dims(
+                    sigmoid_binary_cross_entropy(self.h(params, x), y),
+                    axis=1,
+                )
+            case "logistic_regression":
+                return jnp.expand_dims(
+                    sigmoid_binary_cross_entropy(self.h(params, x), y)
+                    + (self.reg / 2) * jnp.linalg.norm(params) ** 2,
+                    axis=1,
+                )
 
-    def accuracy(self, params: Array, x: Array, y) -> Array:
+    def accuracy(self, params: Array, x: Array, y: Array) -> Array:
         return acc_fn(jax.nn.sigmoid(self.h(params, x)), y)
 
-    def init_model(self) -> Array | MutableParams:
-        if self.model == "NN":
-            def forward(x: Array) -> Array:
-                mlp = hk.Sequential([hk.Linear(100), jax.nn.relu, hk.Linear(1)])
-                return mlp(x).squeeze()
-            model = hk.without_apply_rng(hk.transform(forward))
-            self.h = jax.jit(model.apply)
-            params = model.init(jax.random.PRNGKey(self.seed), jnp.zeros((1, 11)))
-            return params
-        if self.model == "logistic_regression":
-            self.h = lambda params, x: x @ params
-            return initialize_params((11,), self.seed)
+    def init_model(self) -> Array:
+        match self.model:
+            case "NN":
 
-        raise NotImplementedError("Model not implemented: {}".format(self.model))
+                def forward(x: Array) -> Array:
+                    mlp = hk.Sequential([hk.Linear(100), jax.nn.relu, hk.Linear(1)])
+                    return mlp(x).squeeze()
+
+                model = hk.without_apply_rng(hk.transform(forward))
+                self.h = jax.jit(model.apply)
+                params = model.init(jax.random.PRNGKey(self.seed), jnp.zeros((1, 11)))
+                return params
+            case "logistic_regression":
+                self.h = lambda params, x: x @ params
+                return initialize_params((11,), self.seed)
+
+    def init_data(self) -> None:
+        self.dataset = CreditDataset(datafile=self.datafile, seed=self.seed)
 
     def proj_fn(self, params: Array) -> Array:
         def fn(x: Array) -> Array:
             norm = jnp.linalg.norm(x, ord=2)  # Compute L2 norm of theta
             scale = jnp.minimum(1.0, 10.0 / norm)  # Scale factor to enforce constraint
             return x * scale
+
         return jax.tree_util.tree_map(fn, params)
 
     def shift_data_distribution(
@@ -123,7 +134,15 @@ class Credit:
     """
 
     def train(self, optimizer_name: Optimizers) -> Optimizer:
+        self.init_data()
         start_time = time.time()
+        match self.logging:
+            case "wandb":
+                log_type = Log.WANDB
+            case "mlflow":
+                log_type = Log.ML_FLOW
+            case "offline":
+                log_type = Log.OFFLINE
 
         logger = Logger(
             project="decoupled-loss",
@@ -131,7 +150,7 @@ class Credit:
             name=optimizer_name
             + f"_model_{self.model}_{self.base_optimizer}_M{self.momentum}_S{self.rho}_{self.seed}",
             config=asdict(self),
-            log_type=Log.WANDB if self.log_wandb else Log.OFFLINE,
+            log_type=log_type,
         )
 
         try:
