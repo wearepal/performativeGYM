@@ -23,6 +23,7 @@ class Logger:
         config: dict[str, Any],
         name: str,
         log_type: Log = Log.WANDB,
+        login: bool = True,
     ):
         self.log_type = log_type
 
@@ -38,9 +39,12 @@ class Logger:
                     os.mkdir(os.path.join("data", group))
             case Log.ML_FLOW:
                 import mlflow
-                mlflow.login()
-                mlflow.set_experiment(project)
-                mlflow.start_run(run_name=name)
+                if login:
+                    mlflow.login()
+                    mlflow.set_experiment(project)
+                    mlflow.start_run(run_name=name)
+                else:
+                    mlflow.start_run()
                 mlflow.set_tag("group", group)
                 mlflow.log_params(config)
 
