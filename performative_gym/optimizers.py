@@ -12,6 +12,7 @@ __all__ = [
     "BaseOptimizer",
     "DFO",
     "DPerfGD",
+    "BarierDPerfGD",
     "Objective",
     "Optimizer",
     "Optimizers",
@@ -26,6 +27,7 @@ Optimizers: TypeAlias = Literal[
     "RGD",
     "PerfGDReparam",
     "DPerfGD",
+    "BarierDPerfGD",
     "RRM",
     "PerfGDReinforce",
     "RegRRM",
@@ -43,11 +45,11 @@ class LossFn(Protocol[Y]):
 
 class Optimizer(Generic[Y]):
     def __init__(
-        self,
-        params: Array,
-        lr: float,
-        loss_fn: LossFn[Y],
-        proj_fn: Callable[[Array], Array] = (lambda params: params),
+            self,
+            params: Array,
+            lr: float,
+            loss_fn: LossFn[Y],
+            proj_fn: Callable[[Array], Array] = (lambda params: params),
     ):
         self.current_params = params
         self.lr = lr
@@ -67,13 +69,13 @@ class RGD(Optimizer[Y], Generic[Y]):
     last_update: Array
 
     def __init__(
-        self,
-        params: Array,
-        lr: float,
-        loss_fn: LossFn[Y],
-        proj_fn: Callable[[Array], Array] = (lambda params: params),
-        base_optimizer: BaseOptimizer = "GD",
-        momentum: float = 0,
+            self,
+            params: Array,
+            lr: float,
+            loss_fn: LossFn[Y],
+            proj_fn: Callable[[Array], Array] = (lambda params: params),
+            base_optimizer: BaseOptimizer = "GD",
+            momentum: float = 0,
     ):
         super().__init__(params, lr, loss_fn, proj_fn)
         if base_optimizer == "GD":
@@ -106,12 +108,12 @@ class RRM(Optimizer[Y], Generic[Y]):
     grads: Array
 
     def __init__(
-        self,
-        params: Array,
-        lr: float,
-        loss_fn: LossFn[Y],
-        proj_fn: Callable[[Array], Array],
-        tol: float,
+            self,
+            params: Array,
+            lr: float,
+            loss_fn: LossFn[Y],
+            proj_fn: Callable[[Array], Array],
+            tol: float,
     ):
         super().__init__(params, lr, loss_fn, proj_fn)
         self.tol = tol
@@ -171,13 +173,13 @@ class RegRRM(Optimizer[Y], Generic[Y]):
     grads: Array
 
     def __init__(
-        self,
-        params: Array,
-        lr: float,
-        loss_fn: LossFn[Y],
-        proj_fn: Callable[[Array], Array],
-        tol: float,
-        reg: float,
+            self,
+            params: Array,
+            lr: float,
+            loss_fn: LossFn[Y],
+            proj_fn: Callable[[Array], Array],
+            tol: float,
+            reg: float,
     ):
         super().__init__(params, lr, loss_fn, proj_fn)
         self.tol = tol
@@ -200,8 +202,8 @@ class RegRRM(Optimizer[Y], Generic[Y]):
         while total_diff > self.tol:
             grads = grad(
                 lambda params: jnp.mean(self.loss_fn(params, x, y))
-                + self.reg
-                * jnp.linalg.norm(params - self.params_history[-1] + 1e-8) ** 2
+                               + self.reg
+                               * jnp.linalg.norm(params - self.params_history[-1] + 1e-8) ** 2
             )(self.current_params)
 
             params_new = jax.tree_util.tree_map(
@@ -241,14 +243,14 @@ class PerfGDReinforce(Optimizer[Y], Generic[Y]):
     grads: Array
 
     def __init__(
-        self,
-        params: Array,
-        lr: float,
-        loss_fn: LossFn[Y],
-        proj_fn: Callable[[Array], Array],
-        f_fn: LossFn[Y],
-        H: int,
-        prob_distr: Callable[[Array, Y, Array, Array], Array],
+            self,
+            params: Array,
+            lr: float,
+            loss_fn: LossFn[Y],
+            proj_fn: Callable[[Array], Array],
+            f_fn: LossFn[Y],
+            H: int,
+            prob_distr: Callable[[Array, Y, Array, Array], Array],
     ):
         super().__init__(params, lr, loss_fn, proj_fn)
         self.f_fn = f_fn
@@ -259,11 +261,11 @@ class PerfGDReinforce(Optimizer[Y], Generic[Y]):
     def delta_f_theta(self):
         # Estimating the second part of the performative gradient
         delta_theta = (
-            jnp.array(self.params_history[self.i - self.H : self.i])
-            - self.params_history[self.i]
+                jnp.array(self.params_history[self.i - self.H: self.i])
+                - self.params_history[self.i]
         ).T
         delta_f = (
-            jnp.array(self.f_history[self.i - self.H : self.i]) - self.f_history[self.i]
+                jnp.array(self.f_history[self.i - self.H: self.i]) - self.f_history[self.i]
         ).T
         delta_f_theta = delta_f @ jnp.linalg.pinv(delta_theta)
         return delta_f_theta
@@ -320,14 +322,14 @@ class PerfGDReparam(Optimizer[Y], Generic[Y]):  # Especial Gradient Descent
     grads: Array
 
     def __init__(
-        self,
-        params: Array,
-        lr: float,
-        loss_fn: LossFn[Y],
-        proj_fn: Callable[[Array], Array],
-        distr_shift: Callable[[Array], tuple[Array, Y]],
-        base_optimizer: BaseOptimizer = "GD",
-        momentum: float = 0,
+            self,
+            params: Array,
+            lr: float,
+            loss_fn: LossFn[Y],
+            proj_fn: Callable[[Array], Array],
+            distr_shift: Callable[[Array], tuple[Array, Y]],
+            base_optimizer: BaseOptimizer = "GD",
+            momentum: float = 0,
     ):
         super().__init__(params, lr, loss_fn, proj_fn)
         self.distr_shift = distr_shift
@@ -370,16 +372,16 @@ class DPerfGD(Optimizer[Y], Generic[Y]):  # Decoupled Gradient Descent
     last_update: Array
 
     def __init__(
-        self,
-        params: Array,
-        lr: float,
-        loss_fn: LossFn[Y],
-        proj_fn: Callable[[Array], Array],
-        distr_shift: Callable[[Array], tuple[Array, Y]],
-        reg: float = 0,
-        base_optimizer: BaseOptimizer = "GD",
-        momentum: float = 0,
-        rho: float = 0,
+            self,
+            params: Array,
+            lr: float,
+            loss_fn: LossFn[Y],
+            proj_fn: Callable[[Array], Array],
+            distr_shift: Callable[[Array], tuple[Array, Y]],
+            reg: float = 0,
+            base_optimizer: BaseOptimizer = "GD",
+            momentum: float = 0,
+            rho: float = 0,
     ):
         super().__init__(params, lr, loss_fn, proj_fn)
         self.reg = reg
@@ -421,7 +423,7 @@ class DPerfGD(Optimizer[Y], Generic[Y]):  # Decoupled Gradient Descent
             # figure out why gradient of 0 is Nan
             return jnp.mean(
                 self.loss_fn(p_m, x=x_0, y=y_0)
-            )  # + self.reg * jnp.sum(jnp.abs(p_m - p_d + 1e-8))
+            ) + self.reg * jnp.sum(jnp.abs(p_m - p_d + 1e-8))
 
         grad_M = grad(lambda p: decoupled_loss(p, self.current_p_d))(params)
         grad_D = grad(lambda p_p: decoupled_loss(params, p_p))(self.current_p_d)
@@ -438,14 +440,111 @@ class DPerfGD(Optimizer[Y], Generic[Y]):  # Decoupled Gradient Descent
         updates_M, self.opt_state_M = self.optimizer_M.update(
             grad_M, self.opt_state_M, params
         )
-        current_params = optax.apply_updates(params, updates_M)
+        current_params = self.proj_fn(optax.apply_updates(params, updates_M))
         self.current_params = cast(Array, current_params)
 
         updates_D, self.opt_state_D = self.optimizer_D.update(
             grad_D, self.opt_state_D, self.current_p_d
         )
-        current_p_d = optax.apply_updates(self.current_p_d, updates_D)
+        current_p_d = self.proj_fn(optax.apply_updates(self.current_p_d, updates_D))
         self.current_p_d = cast(Array, current_p_d)
+
+        self.grads = jax.tree_util.tree_map(lambda x, y: x + y, grad_M, grad_D)
+        self.params_history.append(self.current_params)
+        self.p_d_history.append(self.current_p_d)
+        self.i += 1
+
+        return self.current_params
+
+
+class BarierDPerfGD(Optimizer[Y], Generic[Y]):  # Decoupled Gradient Descent
+    grads: Array
+    last_update: Array
+
+    def __init__(
+            self,
+            params: Array,
+            lr: float,
+            loss_fn: LossFn[Y],
+            proj_fn: Callable[[Array], Array],
+            distr_shift: Callable[[Array], tuple[Array, Y]],
+            reg: float = 0,
+            base_optimizer: BaseOptimizer = "GD",
+            momentum: float = 0,
+            rho: float = 0,
+    ):
+        super().__init__(params, lr, loss_fn, proj_fn)
+        self.reg = reg
+        self.distr_shif = distr_shift
+        self.current_p_d = params
+        self.p_d_history = [params]
+        self.rho = rho
+
+        if base_optimizer == "GD":
+            self.optimizer_M = optax.sgd(learning_rate=lr, momentum=momentum)
+            self.optimizer_D = optax.sgd(learning_rate=lr, momentum=momentum)
+        elif base_optimizer == "adam":
+            self.optimizer_M = optax.adam(learning_rate=lr)
+            self.optimizer_D = optax.adam(learning_rate=lr)
+        elif base_optimizer == "adamw":
+            self.optimizer_M = optax.adamw(learning_rate=lr)
+            self.optimizer_D = optax.adamw(learning_rate=lr)
+        elif base_optimizer == "adagrad":
+            self.optimizer_M = optax.adagrad(learning_rate=lr)
+            self.optimizer_D = optax.adagrad(learning_rate=lr)
+
+        self.opt_state_M = self.optimizer_M.init(params)
+        self.opt_state_D = self.optimizer_D.init(params)
+
+    def step(self, params: Array, x: Array, y: Y) -> Array:
+
+        def log_barrier_term(p_m, p_d):
+            g = jnp.linalg.norm(p_m - p_d + 1e-9, ord=2) - 0.9
+            if g >= 0:
+                return jnp.inf
+            return jnp.log(-g)
+
+        def decoupled_loss(p_m: Array, p_d: Array) -> Array:
+            x_0, y_0 = self.distr_shif(p_d)
+            # return jnp.mean(self.loss_fn(p_m, x=x, y=y)) + self.reg * jnp.linalg.norm(p_m - p_d + 1e-8)**2 #figure out why gradient of 0 is Nan
+            # figure out why gradient of 0 is Nan
+            return jnp.mean(
+                self.loss_fn(p_m, x=x_0, y=y_0)
+            )
+
+        grad_M = grad(lambda p: decoupled_loss(p, self.current_p_d) - self.reg * log_barrier_term(p, self.current_p_d) )(
+            params)  # - self.reg * grad_barrier_term_M(params, self.current_p_d)
+        grad_D = grad(lambda p_p: decoupled_loss(params, p_p) - self.reg * log_barrier_term(params, p_p))(
+            self.current_p_d)  # - self.reg * grad_barrier_term_D(params, self.current_p_d)
+
+        # self.current_params = jax.tree_util.tree_map(lambda p_m, grads_m: self.proj_fn(p_m - self.lr * grads_m) if isinstance(p_m, jnp.ndarray) else p_m, params, grad_M)
+        # self.current_p_d = jax.tree_util.tree_map(lambda p_d, grads_d: self.proj_fn(p_d - self.lr * grads_d) if isinstance(p_d, jnp.ndarray) else p_d, self.current_p_d, grad_D)
+
+        updates_M, self.opt_state_M = self.optimizer_M.update(
+            grad_M, self.opt_state_M, params
+        )
+        updates_D, self.opt_state_D = self.optimizer_D.update(
+            grad_D, self.opt_state_D, self.current_p_d
+        )
+
+        min_lr = 1e-8
+        lr = self.lr
+        while lr > min_lr:
+            # Scale updates by current lr
+            scaled_updates_M = jax.tree.map(lambda u: lr * u, updates_M)
+            scaled_updates_D = jax.tree.map(lambda u: lr * u, updates_D)
+
+            # Apply updates and project
+            candidate_params = self.proj_fn(optax.apply_updates(params, scaled_updates_M))
+            candidate_p_d = self.proj_fn(optax.apply_updates(self.current_p_d, scaled_updates_D))
+
+            if jnp.linalg.norm(candidate_params - candidate_p_d, ord=2) < 1.0:
+                break
+            else:
+                lr *= 0.1
+
+        self.current_params = cast(Array, candidate_params)
+        self.current_p_d = cast(Array, candidate_p_d)
 
         self.grads = jax.tree_util.tree_map(lambda x, y: x + y, grad_M, grad_D)
         self.params_history.append(self.current_params)
@@ -457,15 +556,15 @@ class DPerfGD(Optimizer[Y], Generic[Y]):  # Decoupled Gradient Descent
 
 class DFO(Optimizer[Y], Generic[Y]):
     def __init__(
-        self,
-        params: Array,
-        lr: float,
-        loss_fn: LossFn[Y],
-        proj_fn: Callable[[Array], Array],
-        shift_data_distribution: Callable,
-        seed: int,
-        samples: int = 10,
-        delta: float = 0.1,
+            self,
+            params: Array,
+            lr: float,
+            loss_fn: LossFn[Y],
+            proj_fn: Callable[[Array], Array],
+            shift_data_distribution: Callable,
+            seed: int,
+            samples: int = 10,
+            delta: float = 0.1,
     ):
         super().__init__(params, lr, loss_fn, proj_fn)
         self.distr_shift = shift_data_distribution
@@ -475,7 +574,7 @@ class DFO(Optimizer[Y], Generic[Y]):
 
     def step(self, params: Array, x: Array, y: Y) -> Array:
         def sample_unit_sphere(
-            dim: tuple[int, ...], num_samples: int, seed: int
+                dim: tuple[int, ...], num_samples: int, seed: int
         ) -> Array:
             """
             Generate samples uniformly on the unit sphere S^{d-1}.
