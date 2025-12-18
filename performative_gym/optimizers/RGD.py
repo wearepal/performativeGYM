@@ -1,4 +1,4 @@
-from . import BaseOptimizer, Optimizer, LossFn, Generic, Y
+from .optimizer import BaseOptimizer, Optimizer, LossFn, Generic, Y
 
 from collections.abc import Callable
 

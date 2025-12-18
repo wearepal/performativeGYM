@@ -8,7 +8,7 @@ from jax import Array
 from numpy import typing as npt
 from tqdm.auto import tqdm
 
-from .optimizers import LossFn, Optimizers
+from performative_gym.optimizers import LossFn, Optimizers
 
 Y = TypeVar("Y", contravariant=True, bound=Array | None)
 
