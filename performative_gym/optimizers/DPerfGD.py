@@ -142,8 +142,8 @@ class BarierDPerfGD(Optimizer[Y], Generic[Y]):  # Decoupled Gradient Descent
 
     def step(self, params: Array, x: Array, y: Y) -> Array:
 
-        def log_barrier_term(p_m, p_d):
-            g = jnp.linalg.norm(p_m - p_d + 1e-9, ord=2) - 0.9
+        def log_barrier_term(p_m, p_d, reg=0.9):
+            g = jnp.linalg.norm(p_m - p_d + 1e-9, ord=2) - reg
             if g >= 0:
                 return jnp.inf
             return jnp.log(-g)
