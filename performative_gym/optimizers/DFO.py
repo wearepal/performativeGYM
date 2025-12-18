@@ -1,12 +1,11 @@
-from . import BaseOptimizer, Optimizer, LossFn, Generic, Y
+from .optimizer import Optimizer, LossFn, Generic, Y
 
 from collections.abc import Callable
 
-import optax
 import jax.numpy as jnp
 import jax
 
-from jax import Array, grad
+from jax import Array
 
 
 class DFO(Optimizer[Y], Generic[Y]):

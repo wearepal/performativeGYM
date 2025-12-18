@@ -20,7 +20,6 @@ from performative_gym import (
     Optimizers,
     PerfGDReinforce,
     PerfGDReparam,
-    RegRRM,
 )
 from performative_gym.logger import Log, Logger
 from performative_gym.utils import initialize_params, loss_values
