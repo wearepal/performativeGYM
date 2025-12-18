@@ -17,6 +17,7 @@ from performative_gym import (
     RGD,
     RRM,
     DPerfGD,
+    DecCostDPerfGD,
     Optimizer,
     Optimizers,
     PerfGDReinforce,
@@ -41,7 +42,7 @@ class Credit:
     """Number of samples to use for the experiment; 120,000 is the default size for the credit dataset."""
     iterations: int = 5000
     seed: int = 10
-    optimizer: Optimizers = "DPerfGD"
+    optimizer: Optimizers = "DecCostDPerfGD"
     base_optimizer: BaseOptimizer = "GD"
     momentum: float = 0
     logging: Literal["offline", "wandb", "mlflow"] = "offline"
@@ -180,6 +181,18 @@ class Credit:
                         params,
                         lr=self.lr,
                         loss_fn=self.loss_fn,
+                        proj_fn=self.proj_fn,
+                        distr_shift=(lambda p: self.shift_data_distribution(p, self.n)),
+                        base_optimizer=self.base_optimizer,
+                        momentum=self.momentum,
+                        rho=self.rho,
+                    )
+                case "DecCostDPerfGD":
+                    optimizer = DecCostDPerfGD(
+                        params,
+                        lr=self.lr,
+                        loss_fn=self.loss_fn,
+                        h = self.h,
                         proj_fn=self.proj_fn,
                         distr_shift=(lambda p: self.shift_data_distribution(p, self.n)),
                         base_optimizer=self.base_optimizer,
