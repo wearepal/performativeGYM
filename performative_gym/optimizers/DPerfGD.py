@@ -66,9 +66,10 @@ class DPerfGD(Optimizer[Y], Generic[Y]):  # Decoupled Gradient Descent
             x_0, y_0 = self.distr_shif(p_d)
             # return jnp.mean(self.loss_fn(p_m, x=x, y=y)) + self.reg * jnp.linalg.norm(p_m - p_d + 1e-8)**2 #figure out why gradient of 0 is Nan
             # figure out why gradient of 0 is Nan
+            reg_term = jax.tree_util.tree_map(lambda a, b: jnp.sum((a - b) ** 2), p_m, p_d)
             return jnp.mean(
                 self.loss_fn(p_m, x=x_0, y=y_0)
-            ) + self.reg * jnp.sum(jnp.abs(p_m - p_d + 1e-8))
+            ) + self.reg * jax.tree_util.tree_reduce(lambda x, y: x + y, reg_term)
 
         grad_M = grad(lambda p: decoupled_loss(p, self.current_p_d))(params)
         grad_D = grad(lambda p_p: decoupled_loss(params, p_p))(self.current_p_d)
