@@ -42,7 +42,7 @@ class Credit:
     """Number of samples to use for the experiment; 120,000 is the default size for the credit dataset."""
     iterations: int = 5000
     seed: int = 10
-    optimizer: Optimizers = "DecCostDPerfGD"
+    optimizer: Optimizers = "DPerfGD"
     base_optimizer: BaseOptimizer = "GD"
     momentum: float = 0
     logging: Literal["offline", "wandb", "mlflow"] = "offline"
@@ -195,6 +195,7 @@ class Credit:
                         h = self.h,
                         proj_fn=self.proj_fn,
                         distr_shift=(lambda p: self.shift_data_distribution(p, self.n)),
+                        reg=self.reg,
                         base_optimizer=self.base_optimizer,
                         momentum=self.momentum,
                         rho=self.rho,
@@ -241,7 +242,7 @@ class Credit:
                 for i in range(self.iterations):
                     x, y = (
                         self.shift_data_distribution(optimizer.current_p_d, self.n)
-                        if optimizer_name == "DPerfGD"
+                        if optimizer_name in ["DPerfGD", "DecCostDPerfGD"]
                         else self.shift_data_distribution(params, self.n)
                     )
                     # Perform gradient descent step
