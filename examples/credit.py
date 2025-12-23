@@ -42,7 +42,7 @@ class Credit:
     """Number of samples to use for the experiment; 120,000 is the default size for the credit dataset."""
     iterations: int = 5000
     seed: int = 10
-    optimizer: Optimizers = "DPerfGD"
+    optimizer: Optimizers = "DecCostDPerfGD"
     base_optimizer: BaseOptimizer = "GD"
     momentum: float = 0
     logging: Literal["offline", "wandb", "mlflow"] = "offline"
@@ -183,6 +183,7 @@ class Credit:
                         loss_fn=self.loss_fn,
                         proj_fn=self.proj_fn,
                         distr_shift=(lambda p: self.shift_data_distribution(p, self.n)),
+                        reg=self.reg,
                         base_optimizer=self.base_optimizer,
                         momentum=self.momentum,
                         rho=self.rho,
