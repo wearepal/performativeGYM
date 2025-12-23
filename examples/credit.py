@@ -42,7 +42,7 @@ class Credit:
     """Number of samples to use for the experiment; 120,000 is the default size for the credit dataset."""
     iterations: int = 5000
     seed: int = 10
-    optimizer: Optimizers = "DecCostDPerfGD"
+    optimizer: Optimizers = "DPerfGD"
     base_optimizer: BaseOptimizer = "GD"
     momentum: float = 0
     logging: Literal["offline", "wandb", "mlflow"] = "offline"
@@ -51,7 +51,7 @@ class Credit:
     """Model type to use for the experiment, either 'NN' for a neural network or 'logistic_regression'."""
     lr: float = 0.1
     """Learning rate for the optimizer."""
-    reg: float = 0
+    reg: float = 5
     """Regularization parameter for the logistic regression model."""
     rho: float = 0
     datafile: str = "credit_data.zip"
@@ -149,7 +149,7 @@ class Credit:
             project="decoupled-loss",
             group=f"{self.output_file}",
             name=optimizer_name
-            + f"_model_{self.model}_{self.base_optimizer}_M{self.momentum}_S{self.rho}_{self.seed}",
+            + f"_model_{self.model}_{self.base_optimizer}_reg{self.reg}_{self.seed}",
             config=asdict(self),
             log_type=log_type,
         )
