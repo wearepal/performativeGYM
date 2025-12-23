@@ -51,7 +51,7 @@ class Credit:
     """Model type to use for the experiment, either 'NN' for a neural network or 'logistic_regression'."""
     lr: float = 0.1
     """Learning rate for the optimizer."""
-    reg: float = 5
+    reg: float = 0
     """Regularization parameter for the logistic regression model."""
     rho: float = 0
     datafile: str = "credit_data.zip"
