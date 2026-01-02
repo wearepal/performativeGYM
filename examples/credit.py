@@ -102,7 +102,7 @@ class Credit:
         return jax.tree_util.tree_map(fn, params)
 
     def shift_data_distribution(
-        self, params: Array, n: int
+            self, params: Array, n: int
     ) -> tuple[Array, Array]:  # MUST return size (n,d)
         z, y = self.dataset.features[:n], self.dataset.labels[:n]
         grad_h = grad(lambda x: jnp.squeeze(self.h(params, jnp.expand_dims(x, axis=0))))
@@ -149,7 +149,7 @@ class Credit:
             project="decoupled-loss",
             group=f"{self.output_file}",
             name=optimizer_name
-            + f"_model_{self.model}_{self.base_optimizer}_reg{self.reg}_{self.seed}",
+                 + f"_model_{self.model}_{self.base_optimizer}_reg{self.reg}_{self.seed}",
             config=asdict(self),
             log_type=log_type,
         )
@@ -193,7 +193,7 @@ class Credit:
                         params,
                         lr=self.lr,
                         loss_fn=self.loss_fn,
-                        h = self.h,
+                        h=self.h,
                         proj_fn=self.proj_fn,
                         distr_shift=(lambda p: self.shift_data_distribution(p, self.n)),
                         reg=self.reg,
@@ -246,8 +246,6 @@ class Credit:
                         if optimizer_name in ["DPerfGD", "DecCostDPerfGD"]
                         else self.shift_data_distribution(params, self.n)
                     )
-                    # Perform gradient descent step
-                    params = optimizer.step(params, x=x, y=y)
                     current_loss = jnp.mean(self.loss_fn(params, x=x, y=y))
                     logger.log(
                         {
@@ -265,15 +263,14 @@ class Credit:
                                     params
                                 )
                             ).item(),
+                            "deception_cost": jax.tree_util.tree_reduce(lambda c, d: c + d,
+                                            jax.tree_util.tree_map(lambda a, b: jnp.sum((a - b) ** 2), params,optimizer.current_p_d))
+                                    if optimizer_name in ["DPerfGD", "DecCostDPerfGD"] else 0,
+                            "deception_cost_f": jnp.sum(jnp.abs(self.h(params, x) - self.h(optimizer.current_p_d, x)))
+                                    if optimizer_name in ["DPerfGD", "DecCostDPerfGD"] else 0
                         },
                         step=i,
                     )
-
-                    """
-                    grad2 = grad(lambda p_p: decoupled_loss(p_p, params))(params)
-                    grad1 = grad(lambda p: decoupled_loss(params, p))(params)
-                    print(grad1, grad2)
-                    """
 
                     pbar.set_description(
                         "Performative_loss: {0:.4f} Accuracy: {1:.2f}%".format(
@@ -281,6 +278,19 @@ class Credit:
                             self.accuracy(params, x, y).item() * 100,
                         )
                     )
+
+
+
+                    # Perform gradient descent step
+                    params = optimizer.step(params, x=x, y=y)
+
+
+                    """
+                    grad2 = grad(lambda p_p: decoupled_loss(p_p, params))(params)
+                    grad1 = grad(lambda p: decoupled_loss(params, p))(params)
+                    print(grad1, grad2)
+                    """
+
 
                     # print(f'Iteration {i+1} - loss: {current_loss:.4f} params: {params} ')
                     pbar.update(1)
