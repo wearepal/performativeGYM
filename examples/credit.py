@@ -264,10 +264,10 @@ class Credit:
                                 )
                             ).item(),
                             "deception_cost": jax.tree_util.tree_reduce(lambda c, d: c + d,
-                                            jax.tree_util.tree_map(lambda a, b: jnp.sum((a - b) ** 2), params,optimizer.current_p_d))
-                                    if optimizer_name in ["DPerfGD", "DecCostDPerfGD"] else 0,
-                            "deception_cost_f": jnp.sum(jnp.abs(self.h(params, x) - self.h(optimizer.current_p_d, x)))
-                                    if optimizer_name in ["DPerfGD", "DecCostDPerfGD"] else 0
+                                            jax.tree_util.tree_map(lambda a, b: jnp.sum((a - b) ** 2), params,optimizer.current_p_d)).item()
+                                    if optimizer_name in ["DPerfGD", "DecCostDPerfGD"] else 0.,
+                            "deception_cost_f": jnp.sum(jnp.abs(self.h(params, x) - self.h(optimizer.current_p_d, x))).item
+                                    if optimizer_name in ["DPerfGD", "DecCostDPerfGD"] else 0.
                         },
                         step=i,
                     )
