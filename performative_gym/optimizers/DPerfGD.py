@@ -233,7 +233,11 @@ class BarierDPerfGD(Optimizer[Y], Generic[Y]):  # Decoupled Gradient Descent
     def step(self, params: Array, x: Array, y: Y) -> Array:
 
         def log_barrier_term(p_m, p_d, reg=0.9):
-            g = jnp.linalg.norm(p_m - p_d + 1e-9, ord=2) - reg
+            reg_term = jax.tree_util.tree_map(lambda a, b: jnp.sum((a - b) ** 2), p_m, p_d)
+
+            reg_term = jax.tree_util.tree_reduce(lambda x, y: x + y, reg_term)
+
+            g = reg_term - reg
             if g >= 0:
                 return jnp.inf
             return jnp.log(-g)
@@ -246,9 +250,9 @@ class BarierDPerfGD(Optimizer[Y], Generic[Y]):  # Decoupled Gradient Descent
                 self.loss_fn(p_m, x=x_0, y=y_0)
             )
 
-        grad_M = grad(lambda p: decoupled_loss(p, self.current_p_d) - self.reg * log_barrier_term(p, self.current_p_d) )(
+        grad_M = grad(lambda p: decoupled_loss(p, self.current_p_d) - log_barrier_term(p, self.current_p_d, self.reg) )(
             params)  # - self.reg * grad_barrier_term_M(params, self.current_p_d)
-        grad_D = grad(lambda p_p: decoupled_loss(params, p_p) - self.reg * log_barrier_term(params, p_p))(
+        grad_D = grad(lambda p_p: decoupled_loss(params, p_p) - log_barrier_term(params, p_p, self.reg))(
             self.current_p_d)  # - self.reg * grad_barrier_term_D(params, self.current_p_d)
 
         # self.current_params = jax.tree_util.tree_map(lambda p_m, grads_m: self.proj_fn(p_m - self.lr * grads_m) if isinstance(p_m, jnp.ndarray) else p_m, params, grad_M)
@@ -272,7 +276,10 @@ class BarierDPerfGD(Optimizer[Y], Generic[Y]):  # Decoupled Gradient Descent
             candidate_params = self.proj_fn(optax.apply_updates(params, scaled_updates_M))
             candidate_p_d = self.proj_fn(optax.apply_updates(self.current_p_d, scaled_updates_D))
 
-            if jnp.linalg.norm(candidate_params - candidate_p_d, ord=2) < 1.0:
+            reg_term = jax.tree_util.tree_map(lambda a, b: jnp.sum((a - b) ** 2), candidate_params, candidate_p_d)
+            reg_term = jax.tree_util.tree_reduce(lambda x, y: x + y, reg_term)
+
+            if reg_term < self.reg:
                 break
             else:
                 lr *= 0.1

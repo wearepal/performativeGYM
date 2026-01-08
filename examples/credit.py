@@ -22,6 +22,7 @@ from performative_gym import (
     Optimizers,
     PerfGDReinforce,
     PerfGDReparam,
+    BarierDPerfGD,
 )
 from performative_gym.logger import Log, Logger
 from performative_gym.optimizers import BaseOptimizer
@@ -194,6 +195,18 @@ class Credit:
                         lr=self.lr,
                         loss_fn=self.loss_fn,
                         h=self.h,
+                        proj_fn=self.proj_fn,
+                        distr_shift=(lambda p: self.shift_data_distribution(p, self.n)),
+                        reg=self.reg,
+                        base_optimizer=self.base_optimizer,
+                        momentum=self.momentum,
+                        rho=self.rho,
+                    )
+                case "BarierDPerfGD":
+                    optimizer = BarierDPerfGD(
+                        params,
+                        lr=self.lr,
+                        loss_fn=self.loss_fn,
                         proj_fn=self.proj_fn,
                         distr_shift=(lambda p: self.shift_data_distribution(p, self.n)),
                         reg=self.reg,
