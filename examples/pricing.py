@@ -16,7 +16,8 @@ from performative_gym.optimizers import (
     RGD,
     RRM,
     DPerfGD,
-    #BarierDPerfGD,
+    DecCostDPerfGD,
+    BarierDPerfGD,
     Optimizer,
     Optimizers,
     PerfGDReinforce,
@@ -35,8 +36,9 @@ class Pricing:
     """Argument parser for configuration options."""
 
     # Configuration options with default values
-    mu0: float = 6
-    epsilon: float = 1.5
+    z0_o: float = 9
+    theta_0_o: float = 6
+    epsilon: float = 2
     n: int = 1000
     d: int = 1
     iterations: int = 100
@@ -47,8 +49,13 @@ class Pricing:
     log_wandb: bool = False
 
     @cached_property
-    def mu_0(self) -> Array:
-        return self.mu0 * jnp.ones((self.d)) + jax.random.uniform(
+    def z_0(self) -> Array:
+        return self.z0_o * jnp.ones((self.d)) + jax.random.uniform(
+            jax.random.PRNGKey(3), (self.d,)
+        )
+    @cached_property
+    def theta_0(self) -> Array:
+        return self.theta_0_o * jnp.ones((self.d)) + jax.random.uniform(
             jax.random.PRNGKey(3), (self.d,)
         )
 
@@ -58,21 +65,21 @@ class Pricing:
 
     @cached_property
     def params_opt(self) -> Array:
-        return self.mu_0 / (2 * self.epsilon)
+        return (self.z_0 - self.epsilon * self.theta_0) / (2 * self.epsilon)
 
     @cached_property
     def params_stab(self) -> Array:
-        return self.mu_0 / self.epsilon
+        return self.z_0 / self.epsilon
 
     def loss_fn(self, params: Array, x: Array, y: None) -> Array:
-        return jnp.expand_dims(-params @ x.T, axis=1)
+        return jnp.expand_dims(-(params + self.theta_0) @ x.T, axis=1)
         # return - params @ x.T
 
     def proj_fn(self, params: Array) -> Array:
-        return jnp.clip(params, 0.0, 5.0)
+        return jnp.clip(params, -5.0, 5.0)
 
     def shift_data_distribution(self, params: Array, n: int) -> tuple[Array, None]:
-        mean = self.mu_0 - self.epsilon * params
+        mean = self.z_0 - self.epsilon * params
         return jax.random.multivariate_normal(
             jax.random.PRNGKey(3), mean, self.cov, shape=(n,)
         ), None
@@ -103,15 +110,15 @@ class Pricing:
         logger = Logger(
             project="decoupled-loss",
             group="landscape",
-            name=f"pricing_l2_{self.reg}",
+            name=f"pricing_v2_{self.reg}reg",
             config=asdict(self),
             log_type=Log.WANDB if self.log_wandb else Log.OFFLINE,
         )
         def penalty(p: Array, p_p: Array) -> Array:
             return self.reg * jnp.linalg.norm(p - p_p + 1e-8) ** 2
-        x = np.arange(0, 5.01, 0.01)
+        x = np.arange(-5.0, 5.01, 0.1)
         x = x.reshape(x.shape[0], 1)
-        y = np.arange(0, 5.01, 0.01)
+        y = np.arange(-5.0, 5.01, 0.1)
         y = y.reshape(y.shape[0], 1)
         landscape = loss_values(
             self.shift_data_distribution, self.loss_fn, penalty, self.n, x, y
@@ -139,7 +146,7 @@ class Pricing:
 
         logger = Logger(
             project="PerfGD",
-            group="pricing_barrier",
+            group="pricing_v2",
             name=optimizer_name + f"_{self.d}d_{self.lr}lr_{self.reg}reg_{self.seed}",
             config=asdict(self),
             log_type=Log.WANDB if self.log_wandb else Log.OFFLINE,
@@ -185,6 +192,19 @@ class Pricing:
                         proj_fn=self.proj_fn,
                         distr_shift=(lambda p: self.shift_data_distribution(p, self.n)),
                         reg=self.reg,
+                    )
+                case "DecCostDPerfGD":
+                    optimizer = DecCostDPerfGD(
+                        params,
+                        lr=self.lr,
+                        loss_fn=self.loss_fn,
+                        h=self.h,
+                        proj_fn=self.proj_fn,
+                        distr_shift=(lambda p: self.shift_data_distribution(p, self.n)),
+                        reg=self.reg,
+                        base_optimizer=self.base_optimizer,
+                        momentum=self.momentum,
+                        rho=self.rho,
                     )
                 case "BarierDPerfGD":
                     optimizer = BarierDPerfGD(
@@ -278,7 +298,7 @@ class Pricing:
 
             # print(f'params: {params}')
             # print(
-            #    f'theta_opt: {self.mu_0 / (2 * self.epsilon)}, theta_stab: {self.mu_0 / (self.epsilon)}'
+            #    f'theta_opt: {self.z_0 / (2 * self.epsilon)}, theta_stab: {self.z_0 / (self.epsilon)}'
             # )
             logger.log({"time": time.time() - start_time}, step=0)
 
