@@ -95,7 +95,9 @@ class Pricing:
 
     def decoupled_loss(self, p_p: Array, p: Array) -> Array:
         x, y = self.shift_data_distribution(p_p, self.n)
-        return jnp.mean(self.loss_fn(p, x=x, y=y)) + jnp.mean(self.h())
+
+        return jnp.mean(self.loss_fn(p, x=x, y=y)) + self.reg * jnp.linalg.norm(p - p_p + 1e-8) ** 2
+
 
     def log_decoupled_landscape(self):
         logger = Logger(
@@ -137,8 +139,8 @@ class Pricing:
 
         logger = Logger(
             project="PerfGD",
-            group="pricing",
-            name=optimizer_name + f"_{self.d}d_{self.lr}lr_{self.seed}",
+            group="pricing_barrier",
+            name=optimizer_name + f"_{self.d}d_{self.lr}lr_{self.reg}reg_{self.seed}",
             config=asdict(self),
             log_type=Log.WANDB if self.log_wandb else Log.OFFLINE,
         )
@@ -290,4 +292,4 @@ if __name__ == "__main__":
     start_time = time.time()
     args = tyro.cli(Pricing, use_underscores=True)
     args.train(optimizer_name=args.optimizer)
-    print(f"non-linear with {args.optimizer} in {time.time() - start_time} s")
+    print(f"pricing with {args.optimizer} in {time.time() - start_time} s")
