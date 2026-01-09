@@ -98,9 +98,7 @@ class Linear:
         )
         x = np.arange(-1.5, 1.51, 0.01)
         y = np.arange(-1.5, 1.51, 0.01)
-        landscape = loss_values(
-            self.shift_data_distribution, self.loss_fn, self.n, x, y
-        )
+        landscape = loss_values(self.decoupled_loss, y, )
         logger.log({"x": x.tolist(), "y": y.tolist()}, step=0)
         logger.log_table("landscape", landscape)
         logger.finish()

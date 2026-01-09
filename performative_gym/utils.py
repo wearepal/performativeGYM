@@ -46,10 +46,7 @@ def loss_values_diag(
 
 
 def loss_values(
-    shift_data_distribution: Callable[[Array, int], tuple[Array, Y]],
-    loss_fn: LossFn[Y],
-    penalty: LossFn[Array],
-    n: int,
+    decoupled_loss,
     x_domain: npt.NDArray,
     y_domain: npt.NDArray,
 ) -> list[list[Array]]:
@@ -59,8 +56,7 @@ def loss_values(
         for p_p in x_domain:
             losses = []
             for p in y_domain:
-                x, y = shift_data_distribution(p_p, n)
-                losses.append(jnp.mean(loss_fn(p, x=x, y=y) + penalty(p, p_p)))
+                losses.append(decoupled_loss(p_p, p))
                 pbar.update(1)
             losses_2d.append(losses)
             if p_p == -1 + 0.01 * losses.index(min(losses)):

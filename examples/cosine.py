@@ -99,9 +99,7 @@ class Cosine:
         )
         x = np.arange(-3 / 2 * jnp.pi, 3 / 2 * jnp.pi, 0.01)
         y = np.arange(-3 / 2 * jnp.pi, 3 / 2 * jnp.pi, 0.01)
-        landscape = loss_values(
-            self.shift_data_distribution, self.loss_fn, self.n, x, y
-        )
+        landscape = loss_values(self.decoupled_loss, y, )
         logger.log(
             {
                 "landscape": wandb.Table(data=landscape)

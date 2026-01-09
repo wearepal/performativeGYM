@@ -120,9 +120,7 @@ class Pricing:
         x = x.reshape(x.shape[0], 1)
         y = np.arange(-5.0, 5.01, 0.1)
         y = y.reshape(y.shape[0], 1)
-        landscape = loss_values(
-            self.shift_data_distribution, self.loss_fn, penalty, self.n, x, y
-        )
+        landscape = loss_values(self.decoupled_loss, x, y)
         logger.log(
             {
                 "landscape": wandb.Table(data=landscape)

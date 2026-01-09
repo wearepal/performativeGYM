@@ -115,9 +115,7 @@ class Mixture:
             return jnp.zeros_like(p)
         x = np.arange(-1, 1.01, 0.01)
         y = np.arange(-1, 1.01, 0.01)
-        landscape = loss_values(
-            self.shift_data_distribution, self.loss_fn, penalty, self.n, x, y
-        )
+        landscape = loss_values(self.decoupled_loss, x, y)
         logger.log(
             {
                 "landscape": wandb.Table(data=landscape)
