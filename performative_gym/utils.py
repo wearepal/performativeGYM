@@ -18,6 +18,12 @@ class PlotArgs(Protocol):
     optimizer: Optimizers
 
 
+def user_deception(output_D: Array, output_M: Array) -> Array:
+    preds_D = output_D > 0.5
+    preds_M = output_M > 0.5
+    mask = (~preds_D) & preds_M   # D=0 and M=1
+    return jnp.mean(mask)
+
 def acc_fn(output: Array, labels: Array) -> Array:
     preds = output > 0.5
     correct = jnp.sum(preds == labels)

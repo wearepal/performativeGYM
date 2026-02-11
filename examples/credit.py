@@ -26,7 +26,7 @@ from performative_gym import (
 )
 from performative_gym.logger import Log, Logger
 from performative_gym.optimizers import BaseOptimizer
-from performative_gym.utils import acc_fn, initialize_params, weight_norm
+from performative_gym.utils import acc_fn, initialize_params, weight_norm, user_deception
 
 jax.config.update("jax_enable_x64", True)
 
@@ -280,6 +280,10 @@ class Credit:
                                             jax.tree_util.tree_map(lambda a, b: jnp.sum((a - b) ** 2), params,optimizer.current_p_d)).item()
                                     if optimizer_name in ["DPerfGD", "DecCostDPerfGD"] else 0.,
                             "deception_cost_f": jnp.sum(jnp.abs(self.h(params, x) - self.h(optimizer.current_p_d, x))).item()
+                                    if optimizer_name in ["DPerfGD", "DecCostDPerfGD"] else 0.,
+                            "deception_cost_sigmoid": jnp.sum(jnp.abs(jax.nn.sigmoid(self.h(params, x)) - jax.nn.sigmoid(self.h(optimizer.current_p_d, x)))).item()
+                                    if optimizer_name in ["DPerfGD", "DecCostDPerfGD"] else 0.,
+                            "deception_cost_user": user_deception(jax.nn.sigmoid(self.h(optimizer.current_p_d, x)), jax.nn.sigmoid(self.h(params, x))).item()
                                     if optimizer_name in ["DPerfGD", "DecCostDPerfGD"] else 0.
                         },
                         step=i,
