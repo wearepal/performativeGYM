@@ -11,11 +11,12 @@ from jax import Array
 from jax.typing import ArrayLike
 from tqdm.auto import tqdm
 
-from performative_gym import (
+from performative_gym.optimizers import (
     DFO,
     RGD,
     RRM,
     DPerfGD,
+    #BarierDPerfGD,
     Optimizer,
     Optimizers,
     PerfGDReinforce,
@@ -37,10 +38,11 @@ class Pricing:
     mu0: float = 6
     epsilon: float = 1.5
     n: int = 1000
-    d: int = 100
+    d: int = 1
     iterations: int = 100
-    seed: int = 0
-    optimizer: Optimizers = "RGD"
+    seed: int = 10
+    optimizer: Optimizers = "DPerfGD"
+    reg: float = 0
     lr: float = 0.1
     log_wandb: bool = False
 
@@ -89,26 +91,28 @@ class Pricing:
         return jnp.mean(x, axis=0)
 
     def init_model(self):
-        return initialize_params((self.d,), self.seed)
+        return initialize_params((self.d,), self.seed) + 2.5
 
     def decoupled_loss(self, p_p: Array, p: Array) -> Array:
         x, y = self.shift_data_distribution(p_p, self.n)
-        return jnp.mean(self.loss_fn(p, x=x, y=y))
+        return jnp.mean(self.loss_fn(p, x=x, y=y)) + jnp.mean(self.h())
 
     def log_decoupled_landscape(self):
         logger = Logger(
             project="decoupled-loss",
             group="landscape",
-            name="pricing",
+            name=f"pricing_l2_{self.reg}",
             config=asdict(self),
             log_type=Log.WANDB if self.log_wandb else Log.OFFLINE,
         )
+        def penalty(p: Array, p_p: Array) -> Array:
+            return self.reg * jnp.linalg.norm(p - p_p + 1e-8) ** 2
         x = np.arange(0, 5.01, 0.01)
         x = x.reshape(x.shape[0], 1)
         y = np.arange(0, 5.01, 0.01)
         y = y.reshape(y.shape[0], 1)
         landscape = loss_values(
-            self.shift_data_distribution, self.loss_fn, self.n, x, y
+            self.shift_data_distribution, self.loss_fn, penalty, self.n, x, y
         )
         logger.log(
             {
@@ -133,8 +137,8 @@ class Pricing:
 
         logger = Logger(
             project="PerfGD",
-            group="pricing_grads",
-            name=optimizer_name + f"_{self.d}d_{self.seed}",
+            group="pricing",
+            name=optimizer_name + f"_{self.d}d_{self.lr}lr_{self.seed}",
             config=asdict(self),
             log_type=Log.WANDB if self.log_wandb else Log.OFFLINE,
         )
@@ -178,7 +182,16 @@ class Pricing:
                         loss_fn=self.loss_fn,
                         proj_fn=self.proj_fn,
                         distr_shift=(lambda p: self.shift_data_distribution(p, self.n)),
-                        reg=self.d / 25,
+                        reg=self.reg,
+                    )
+                case "BarierDPerfGD":
+                    optimizer = BarierDPerfGD(
+                        params,
+                        lr=self.lr,
+                        loss_fn=self.loss_fn,
+                        proj_fn=self.proj_fn,
+                        distr_shift=(lambda p: self.shift_data_distribution(p, self.n)),
+                        reg=self.reg,
                     )
                 case "DFO":
                     optimizer = DFO(
@@ -200,14 +213,14 @@ class Pricing:
                 for i in range(self.iterations):
                     x, y = (
                         self.shift_data_distribution(optimizer.current_p_d, self.n)
-                        if optimizer_name == "DPerfGD"
+                        if optimizer_name in ["DPerfGD", "BarierDPerfGD"]
                         else self.shift_data_distribution(params, self.n)
                     )
                     logger.log(
                         {
                             "iteration": i,
                             "p_d": optimizer.current_p_d.tolist()
-                            if optimizer_name == "DPerfGD"
+                            if optimizer_name in ["DPerfGD", "BarierDPerfGD"]
                             else params.tolist(),
                             "p_m": params.tolist(),
                             "losses": jnp.mean(self.loss_fn(params, x=x, y=y)).item(),
@@ -221,7 +234,7 @@ class Pricing:
                         {
                             "iteration": i + 1,
                             "p_d": optimizer.current_p_d.tolist()
-                            if optimizer_name == "DPerfGD"
+                            if optimizer_name in ["DPerfGD", "BarierDPerfGD"]
                             else optimizer.params_history[i].tolist(),
                             "p_m": params.tolist(),
                             "losses": jnp.mean(self.loss_fn(params, x=x, y=y)).item(),

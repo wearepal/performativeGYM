@@ -111,10 +111,12 @@ class Mixture:
             config=asdict(self),
             log_type=Log.WANDB if self.log_wandb else Log.OFFLINE,
         )
+        def penalty(p: Array, p_p: Array) -> Array:
+            return jnp.zeros_like(p)
         x = np.arange(-1, 1.01, 0.01)
         y = np.arange(-1, 1.01, 0.01)
         landscape = loss_values(
-            self.shift_data_distribution, self.loss_fn, self.n, x, y
+            self.shift_data_distribution, self.loss_fn, penalty, self.n, x, y
         )
         logger.log(
             {

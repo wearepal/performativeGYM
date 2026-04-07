@@ -1,5 +1,6 @@
 from collections.abc import Callable, Sequence
 from typing import Protocol, TypeVar
+import time
 
 import jax
 import jax.numpy as jnp
@@ -7,7 +8,7 @@ from jax import Array
 from numpy import typing as npt
 from tqdm.auto import tqdm
 
-from .optimizers import LossFn, Optimizers
+from performative_gym.optimizers import LossFn, Optimizers
 
 Y = TypeVar("Y", contravariant=True, bound=Array | None)
 
@@ -47,6 +48,7 @@ def loss_values_diag(
 def loss_values(
     shift_data_distribution: Callable[[Array, int], tuple[Array, Y]],
     loss_fn: LossFn[Y],
+    penalty: LossFn[Array],
     n: int,
     x_domain: npt.NDArray,
     y_domain: npt.NDArray,
@@ -58,7 +60,7 @@ def loss_values(
             losses = []
             for p in y_domain:
                 x, y = shift_data_distribution(p_p, n)
-                losses.append(jnp.mean(loss_fn(p, x=x, y=y)))
+                losses.append(jnp.mean(loss_fn(p, x=x, y=y) + penalty(p, p_p)))
                 pbar.update(1)
             losses_2d.append(losses)
             if p_p == -1 + 0.01 * losses.index(min(losses)):
