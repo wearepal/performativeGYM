@@ -1,5 +1,5 @@
-from .linear import Linear as Linear
-from .cosine import Cosine as Cosine
-from .nonlinear import NonLinear as NonLinear
-from .mixture import Mixture as Mixture
-from .pricing import Pricing as Pricing
+from .linear import LinearExp as LinearExp
+from .cosine import CosineExp as CosineExp
+from .nonlinear import NonLinearExp as NonLinearExp
+from .mixture import MixtureExp as MixtureExp
+from .pricing import PricingExp as PricingExp

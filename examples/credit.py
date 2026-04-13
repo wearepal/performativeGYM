@@ -1,5 +1,6 @@
 import time
 from dataclasses import asdict, dataclass
+from functools import cached_property
 from typing import Literal
 
 import haiku as hk
@@ -11,7 +12,7 @@ from jax.typing import ArrayLike
 from optax.losses import sigmoid_binary_cross_entropy  # type: ignore
 from tqdm.auto import tqdm
 
-from examples.datasets import CreditDataset
+from performative_gym.distribution_maps.datasets import CreditDataset
 from performative_gym import (
     DFO,
     RGD,
@@ -21,6 +22,7 @@ from performative_gym import (
     Optimizers,
     PerfGDReinforce,
     PerfGDReparam,
+    StrategicClassification,
 )
 from performative_gym.logger import Log, Logger
 from performative_gym.optimizers import BaseOptimizer
@@ -32,7 +34,7 @@ jax.config.update("jax_enable_x64", True)
 
 
 @dataclass
-class Credit:
+class CreditExp:
     """Run the credit experiment with the specified optimizer."""
 
     epsilon: float = 10
@@ -41,7 +43,7 @@ class Credit:
     """Number of samples to use for the experiment; 120,000 is the default size for the credit dataset."""
     iterations: int = 5000
     seed: int = 10
-    optimizer: Optimizers = "DPerfGD"
+    optimizer: Optimizers = "PerfGDReinforce"
     base_optimizer: BaseOptimizer = "GD"
     momentum: float = 0
     logging: Literal["offline", "wandb", "mlflow"] = "offline"
@@ -55,6 +57,16 @@ class Credit:
     rho: float = 0
     datafile: str = "credit_data.zip"
     """Data file containing the credit dataset."""
+
+    @cached_property
+    def distribution_map(self):
+        return StrategicClassification(
+            n=self.n,
+            epsilon=self.epsilon,
+            seed=self.seed,
+            dataset_name="giveMeSomeCredit",
+            h=self.h,
+        )
 
     def loss_fn(self, params: Array, x: Array, y: Array) -> Array:  # Size (n, 1)
         match self.model:
@@ -76,7 +88,6 @@ class Credit:
     def init_model(self) -> Array:
         match self.model:
             case "NN":
-
                 def forward(x: Array) -> Array:
                     mlp = hk.Sequential([hk.Linear(100), jax.nn.relu, hk.Linear(1)])
                     return mlp(x).squeeze()
@@ -100,13 +111,6 @@ class Credit:
 
         return jax.tree_util.tree_map(fn, params)
 
-    def shift_data_distribution(
-        self, params: Array, n: int
-    ) -> tuple[Array, Array]:  # MUST return size (n,d)
-        z, y = self.dataset.features[:n], self.dataset.labels[:n]
-        grad_h = grad(lambda x: jnp.squeeze(self.h(params, jnp.expand_dims(x, axis=0))))
-        return z - self.epsilon * jax.vmap(grad_h)(z), y  # type: ignore
-
     def prob_distr(self, x: Array, y: Array, mean: Array, params: Array) -> Array:
         def normal(x: Array, mean: Array, std: ArrayLike) -> Array:
             z = jax.scipy.stats.multivariate_normal.pdf(x, mean=mean, cov=std)
@@ -124,14 +128,8 @@ class Credit:
 
     def decoupled_loss(self, p_p: Array, p: Array) -> Array:
         self.init_model()
-        x, y = self.shift_data_distribution(p_p, self.n)
+        x, y = self.distribution_map.sample(p_p)
         return jnp.mean(self.loss_fn(p, x=x, y=y))
-
-    """
-    params = jnp.array([-2/3.])
-    grad1 = grad(lambda p: decoupled_loss(params, p))(params)
-    grad2 = grad(lambda p_p: decoupled_loss(p_p, params))(params)
-    """
 
     def train(self, optimizer_name: Optimizers) -> Optimizer:
         self.init_data()
@@ -148,7 +146,7 @@ class Credit:
             project="decoupled-loss",
             group=f"{self.output_file}",
             name=optimizer_name
-            + f"_model_{self.model}_{self.base_optimizer}_M{self.momentum}_S{self.rho}_{self.seed}",
+                 + f"_model_{self.model}_{self.base_optimizer}_M{self.momentum}_S{self.rho}_{self.seed}",
             config=asdict(self),
             log_type=log_type,
         )
@@ -171,21 +169,18 @@ class Credit:
                         lr=self.lr,
                         loss_fn=self.loss_fn,
                         proj_fn=self.proj_fn,
-                        distr_shift=(lambda p: self.shift_data_distribution(p, self.n)),
+                        distr_map=self.distribution_map.sample,
                         base_optimizer=self.base_optimizer,
-                        momentum=self.momentum,
-                    )
+                        momentum=self.momentum)
                 case "DPerfGD":
                     optimizer = DPerfGD(
                         params,
                         lr=self.lr,
                         loss_fn=self.loss_fn,
                         proj_fn=self.proj_fn,
-                        distr_shift=(lambda p: self.shift_data_distribution(p, self.n)),
+                        distr_map=self.distribution_map.sample,
                         base_optimizer=self.base_optimizer,
-                        momentum=self.momentum,
-                        rho=self.rho,
-                    )
+                        momentum=self.momentum)
                 case "RRM":
                     optimizer = RRM(
                         params,
@@ -205,20 +200,12 @@ class Credit:
                         prob_distr=self.prob_distr,
                     )
                 case "DFO":
-                    optimizer = DFO(
-                        params,
-                        lr=self.lr,
-                        loss_fn=self.loss_fn,
-                        proj_fn=self.proj_fn,
-                        shift_data_distribution=(
-                            lambda params: self.shift_data_distribution(params, self.n)
-                        ),
-                        seed=self.seed,
-                    )
-
+                    optimizer = DFO(params, lr=self.lr, loss_fn=self.loss_fn, proj_fn=self.proj_fn,
+                                    distr_map=self.distribution_map.sample, seed=self.seed)
                 case _:
                     print("Optimizer choice unknown")
                     exit()
+
             if log_type is not Log.ML_FLOW:
                 logger.log(
                     {"p_o": jax.tree_util.tree_map(lambda x: x.tolist(), params)},
@@ -227,9 +214,9 @@ class Credit:
             with tqdm(total=self.iterations) as pbar:
                 for i in range(self.iterations):
                     x, y = (
-                        self.shift_data_distribution(optimizer.current_p_d, self.n)
+                        self.distribution_map.sample(optimizer.current_p_d)
                         if optimizer_name == "DPerfGD"
-                        else self.shift_data_distribution(params, self.n)
+                        else self.distribution_map.sample(params)
                     )
                     # Perform gradient descent step
                     params = optimizer.step(params, x=x, y=y)
@@ -253,12 +240,6 @@ class Credit:
                         },
                         step=i,
                     )
-
-                    """
-                    grad2 = grad(lambda p_p: decoupled_loss(p_p, params))(params)
-                    grad1 = grad(lambda p: decoupled_loss(params, p))(params)
-                    print(grad1, grad2)
-                    """
 
                     pbar.set_description(
                         "Performative_loss: {0:.4f} Accuracy: {1:.2f}%".format(
@@ -284,7 +265,7 @@ class Credit:
 
 
 if __name__ == "__main__":
-    args = tyro.cli(Credit, use_underscores=True)
+    args = tyro.cli(CreditExp, use_underscores=True)
     start_time = time.time()
     args.train(optimizer_name=args.optimizer)
     print(f"credit with {args.optimizer} in {time.time() - start_time} s")

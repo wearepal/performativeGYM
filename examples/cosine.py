@@ -4,11 +4,10 @@ from functools import cached_property
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 import tyro
-import wandb
+
 from jax import Array, grad
-from jax.typing import ArrayLike
+
 from tqdm import tqdm
 
 from performative_gym import (
@@ -20,14 +19,15 @@ from performative_gym import (
     Optimizers,
     PerfGDReinforce,
     PerfGDReparam,
+    Linear,
 )
 from performative_gym.logger import Log, Logger
-from performative_gym.utils import initialize_params, loss_values
+from performative_gym.utils import initialize_params
 
 
 @dataclass
-class Cosine:
-    """Argument parser for configuration options."""
+class CosineExp:
+    """Run the cosine experiment with the specified optimizer."""
 
     A1: float = 1
     STD: float = 1
@@ -49,70 +49,34 @@ class Cosine:
     def params_stab(self) -> float:
         return jnp.pi
 
+    @cached_property
+    def distribution_map(self):
+        return Linear(
+            n=self.n,
+            seed=self.seed,
+            A0=0,
+            A1=self.A1,
+            STD=self.STD,
+        )
+
     def loss_fn(self, params: Array, x: Array, y: None) -> Array:  # Size (n, 1)
-        # return - (1 - jnp.cos(params)) * x
         return jnp.cos(params) * x
 
     def proj_fn(self, params: Array) -> Array:
         return jnp.clip(params, -1.0, 1.0)
 
-    def shift_data_distribution(
-        self, params: Array, n: int
-    ) -> tuple[Array, None]:  # MUST return size (n,d)
-        z = jax.random.normal(jax.random.PRNGKey(self.seed), (n,))
-        return jnp.expand_dims((self.A1 * params) + z * self.STD, axis=1), None
-
     def prob_distr(self, x: Array, y: None, mean: Array, params: Array) -> Array:
-        def normal(x: Array, mean: Array, std: ArrayLike) -> Array:
-            z = jax.scipy.stats.norm.pdf(x, loc=mean, scale=std)
-            return z
-
-        def log_distr(distr: Array) -> Array:
-            return jnp.log(distr)
-
-        return log_distr(normal(x, mean, self.STD))
+        return jnp.log(jax.scipy.stats.norm.pdf(x, loc=mean, scale=self.STD))
 
     def f_fn(self, params: Array, x: Array, y: None) -> Array:
         return jnp.mean(x, axis=0)
 
     def decoupled_loss(self, p_p: Array, p: Array) -> Array:
-        x, y = self.shift_data_distribution(p_p, self.n)
+        x, y = self.distribution_map.sample(p_p)
         return jnp.mean(self.loss_fn(p, x=x, y=y))
 
     def init_model(self):
-        params_0 = initialize_params((1,), self.seed) * 3 / 2 * jnp.pi
-        return params_0  # changes the std of initialization
-
-    """
-    params = jnp.array([-2/3.])
-    grad1 = grad(lambda p: decoupled_loss(params, p))(params)
-    grad2 = grad(lambda p_p: decoupled_loss(p_p, params))(params)
-    """
-
-    def log_decoupled_landscape(self) -> None:
-        logger = Logger(
-            project="decoupled-loss",
-            group="landscape",
-            name="cosine",
-            config=asdict(self),
-            log_type=Log.WANDB if self.log_wandb else Log.OFFLINE,
-        )
-        x = np.arange(-3 / 2 * jnp.pi, 3 / 2 * jnp.pi, 0.01)
-        y = np.arange(-3 / 2 * jnp.pi, 3 / 2 * jnp.pi, 0.01)
-        landscape = loss_values(
-            self.shift_data_distribution, self.loss_fn, self.n, x, y
-        )
-        logger.log(
-            {
-                "landscape": wandb.Table(data=landscape)
-                if logger.log_type is Log.WANDB
-                else np.array(landscape).tolist(),
-                "x": x.tolist(),
-                "y": y.tolist(),
-            },
-            step=0,
-        )
-        logger.finish()
+        return initialize_params((1,), self.seed)   # changes the std of initialization
 
     def train(self, optimizer_name: Optimizers) -> Optimizer:
         start_time = time.time()
@@ -131,7 +95,10 @@ class Cosine:
             match optimizer_name:
                 case "RGD":
                     optimizer = RGD(
-                        params, lr=self.lr, loss_fn=self.loss_fn, proj_fn=self.proj_fn
+                        params,
+                        lr=self.lr,
+                        loss_fn=self.loss_fn,
+                        proj_fn=self.proj_fn
                     )
                 case "PerfGDReparam":
                     optimizer = PerfGDReparam(
@@ -139,18 +106,16 @@ class Cosine:
                         lr=self.lr,
                         loss_fn=self.loss_fn,
                         proj_fn=self.proj_fn,
-                        distr_shift=(lambda p: self.shift_data_distribution(p, self.n)),
+                        distr_map=self.distribution_map.sample,
                         base_optimizer=self.base_optimizer,
-                        momentum=self.momentum,
-                    )
+                        momentum=self.momentum)
                 case "DPerfGD":
                     optimizer = DPerfGD(
                         params,
                         lr=self.lr,
                         loss_fn=self.loss_fn,
                         proj_fn=self.proj_fn,
-                        distr_shift=(lambda p: self.shift_data_distribution(p, self.n)),
-                    )
+                        distr_map=self.distribution_map.sample)
                 case "RRM":
                     optimizer = RRM(
                         params,
@@ -158,15 +123,6 @@ class Cosine:
                         loss_fn=self.loss_fn,
                         proj_fn=self.proj_fn,
                         tol=0.01,
-                    )
-                case "RegRRM":
-                    optimizer = RegRRM(
-                        params,
-                        lr=self.lr,
-                        loss_fn=self.loss_fn,
-                        proj_fn=self.proj_fn,
-                        tol=0.01,
-                        reg=10,
                     )
                 case "PerfGDReinforce":
                     optimizer = PerfGDReinforce(
@@ -179,27 +135,18 @@ class Cosine:
                         prob_distr=self.prob_distr,
                     )
                 case "DFO":
-                    optimizer = DFO(
-                        params,
-                        lr=self.lr,
-                        loss_fn=self.loss_fn,
-                        proj_fn=self.proj_fn,
-                        shift_data_distribution=(
-                            lambda params: self.shift_data_distribution(params, self.n)
-                        ),
-                        seed=self.seed,
-                    )
+                    optimizer = DFO(params, lr=self.lr, loss_fn=self.loss_fn, proj_fn=self.proj_fn,
+                                    distr_map=self.distribution_map.sample, seed=self.seed)
 
                 case _:
                     print("Optimizer choice unknown")
                     exit()
 
-            losses = []
-            losses_p_p = []
             with tqdm(total=self.iterations) as pbar:
                 for i in range(self.iterations):
-                    z, _ = self.shift_data_distribution(params, self.n)
-                    losses_p_p.append(jnp.mean(self.loss_fn(params, x=z, y=None)))
+
+                    z, _ = self.distribution_map.sample(params)
+
                     logger.log(
                         {
                             "iteration": i,
@@ -213,7 +160,7 @@ class Cosine:
                     )
                     # Perform gradient descent step
                     params = optimizer.step(params, x=z, y=None)
-                    # Compute current loss
+                    # Compute metrics
                     logger.log(
                         {
                             "iteration": i + 1,
@@ -237,12 +184,6 @@ class Cosine:
                         step=i,
                     )
                     current_loss = jnp.mean(self.loss_fn(params, x=z, y=None))
-                    losses.append(current_loss)
-                    """
-                    grad2 = grad(lambda p_p: decoupled_loss(p_p, params))(params)
-                    grad1 = grad(lambda p: decoupled_loss(params, p))(params)
-                    print(grad1, grad2)
-                    """
 
                     pbar.set_description(
                         "Performative_loss: {0:.4f} params: {1:.2f} params_opt: {2:.4f} params_stab: {3:.4f}".format(
@@ -252,7 +193,6 @@ class Cosine:
                             self.params_stab,
                         )
                     )
-                    # print(f'Iteration {i+1} - loss: {current_loss:.4f} params: {params} ')
                     pbar.update(1)
 
             logger.log({"time": time.time() - start_time}, step=0)
@@ -263,7 +203,7 @@ class Cosine:
 
 
 if __name__ == "__main__":
-    args = tyro.cli(Cosine, use_underscores=True)
+    args = tyro.cli(CosineExp, use_underscores=True)
     start_time = time.time()
     args.train(optimizer_name=args.optimizer)
     print(f"cosine with {args.optimizer} in {time.time() - start_time} s")

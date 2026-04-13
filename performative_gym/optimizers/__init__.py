@@ -1,6 +1,6 @@
 from .optimizer import Optimizers, Optimizer, BaseOptimizer, Objective, LossFn
 from .DFO import DFO
-from .DPerfGD import DPerfGD, BarierDPerfGD, DecCostDPerfGD
+from .DPerfGD import DPerfGD
 from .PerfGDReinforce import PerfGDReinforce
 from .PerfGDReparam import PerfGDReparam
 from .RGD import RGD
@@ -11,11 +11,8 @@ __all__ = [
     "Optimizer",
     "Optimizers",
     "LossFn",
-
     "DFO",
     "DPerfGD",
-    "DecCostDPerfGD",
-    "BarierDPerfGD",
     "PerfGDReinforce",
     "PerfGDReparam",
     "RGD",
