@@ -19,11 +19,11 @@ wandb = ["wandb>=0.20.1"]
 mlflow = ["databricks-sdk>=0.56.0", "mlflow>=3.1.0"]
 
 [build-system]
-requires = ["setuptools"]
-build-backend = "setuptools.build_meta"
+requires = ["uv_build>=0.11.14,<0.12.0"]
+build-backend = "uv_build"
 
-[tool.setuptools]
-packages = ["performative_gym"]
+[tool.uv.build-backend]
+module-root = ""
 
 [tool.uv.sources]
 microsoft-python-type-stubs = { git = "https://github.com/microsoft/python-type-stubs.git", rev = "76ca370" }
