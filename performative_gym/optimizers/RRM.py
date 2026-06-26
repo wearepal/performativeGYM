@@ -1,12 +1,24 @@
-from .optimizer import BaseOptimizer, Optimizer, LossFn, Generic, Y
-
 from collections.abc import Callable, Sequence
+import itertools
+from typing import NamedTuple, TypeAlias
 
-import optax
-import jax.numpy as jnp
 import jax
-
+import jax.numpy as jnp
 from jax import Array, grad
+
+from .optimizer import Optimizer, LossFn, Generic, Y
+
+
+class _Tolerance(NamedTuple):
+    tol: float
+
+
+class _Iterations(NamedTuple):
+    iters: int
+
+
+StoppingCriterion: TypeAlias = _Tolerance | _Iterations
+
 
 class RRM(Optimizer[Y], Generic[Y]):
     """
@@ -56,10 +68,15 @@ class RRM(Optimizer[Y], Generic[Y]):
         enforce constraints on the parameter space, such as box constraints or
         normalization.
 
-    tol : float
-        Tolerance used to terminate the inner optimization loop. The inner loop
-        stops when the norm of the difference between successive parameter values
-        is smaller than ``tol``.
+    tol : float | None
+        Tolerance used to terminate the inner optimization loop. If specified, the
+        inner loop stops when the norm of the difference between successive parameter
+        values is smaller than ``tol``.
+
+    iterations : int | None
+        Maximum number of iterations for the inner optimization loop. If specified,
+        the inner loop will terminate after this many iterations, regardless of
+        convergence.
 
     Attributes
     ----------
@@ -73,8 +90,9 @@ class RRM(Optimizer[Y], Generic[Y]):
         Mean of the gradients computed during the inner optimization loop of the
         most recent RRM step.
 
-    tol : float
-        Convergence tolerance for the inner minimization procedure.
+    stopping_criterion : StoppingCriterion
+        Criterion used to terminate the inner optimization loop, either based on
+        tolerance or a fixed number of iterations.
 
     Methods
     -------
@@ -94,15 +112,26 @@ class RRM(Optimizer[Y], Generic[Y]):
     grads: Array
 
     def __init__(
-            self,
-            params: Array,
-            lr: float,
-            loss_fn: LossFn[Y],
-            proj_fn: Callable[[Array], Array],
-            tol: float,
+        self,
+        params: Array,
+        lr: float,
+        loss_fn: LossFn[Y],
+        proj_fn: Callable[[Array], Array],
+        tol: float | None,
+        iterations: int | None = None,
     ):
         super().__init__(params, lr, loss_fn, proj_fn)
-        self.tol = tol
+        stopping_criterion: StoppingCriterion
+        if tol is not None:
+            if iterations is not None:
+                raise ValueError("Specify either tol or iterations, not both.")
+            else:
+                stopping_criterion = _Tolerance(tol)
+        elif iterations is not None:
+            stopping_criterion = _Iterations(iterations)
+        else:
+            raise ValueError("Specify either tol or iterations.")
+        self.stopping_criterion = stopping_criterion
 
     def _compute_mean(self, params_list: Sequence[Array]):
         # Use tree_map to compute the mean across all corresponding elements
@@ -132,14 +161,19 @@ class RRM(Optimizer[Y], Generic[Y]):
 
     def step(self, params: Array, x: Array, y: Y) -> Array:
 
-        total_diff = jnp.finfo(
-            jnp.float64
-        ).max  # initial value for grads so it enters in while loop
+        # set initial value for grads so it enters in while loop
+        total_diff = jnp.finfo(jnp.float64).max  
 
         history_grads = []
-        j = 0
 
-        while total_diff > self.tol: #Updates until convergence (difference is small)
+        for j in itertools.count():
+            match self.stopping_criterion:
+                case _Tolerance(tol):
+                    if total_diff <= tol:  # Stop on convergence (difference is small)
+                        break
+                case _Iterations(iters):
+                    if j >= iters:  # Stop after a fixed number of iterations
+                        break
 
             grads = grad(lambda p: jnp.mean(self.loss_fn(p, x, y)))(
                 self.current_params
@@ -156,7 +190,6 @@ class RRM(Optimizer[Y], Generic[Y]):
             total_diff = self._compute_diff(params_new, params)
 
             params = params_new
-            j += 1
             history_grads.append(grads)
 
         self.current_params = params

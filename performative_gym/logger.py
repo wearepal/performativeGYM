@@ -42,9 +42,7 @@ class Logger:
                 if login:
                     mlflow.login()
                     mlflow.set_experiment(project)
-                    mlflow.start_run(run_name=name)
-                else:
-                    mlflow.start_run()
+                mlflow.start_run(run_name=name)
                 mlflow.set_tag("group", group)
                 mlflow.log_params(config)
 
