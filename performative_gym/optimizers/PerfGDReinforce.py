@@ -1,6 +1,6 @@
 from .optimizer import BaseOptimizer, Optimizer, LossFn, Generic, Y
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from typing import cast
 
 import jax.numpy as jnp
@@ -8,6 +8,8 @@ import jax
 import optax
 
 from jax import Array, grad, jacobian
+
+__all__ = ["PerfGDReinforce"]
 
 
 class PerfGDReinforce(Optimizer[Y], Generic[Y]):

@@ -7,6 +7,9 @@ import jax.numpy as jnp
 
 from jax import Array, grad
 
+__all__ = ["RGD"]
+
+
 class RGD(Optimizer[Y], Generic[Y]):
     """
     Implementation of Repeated Gradient Descent (RGD), as introduced

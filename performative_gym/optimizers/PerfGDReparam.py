@@ -9,6 +9,8 @@ import jax.numpy as jnp
 
 from jax import Array, grad
 
+__all__ = ["PerfGDReparam"]
+
 
 class PerfGDReparam(Optimizer[Y], Generic[Y]):
     """

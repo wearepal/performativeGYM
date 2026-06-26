@@ -4,6 +4,8 @@ from jax import Array
 
 from .distribution_map import DistributionMap
 
+__all__ = ["NonLinear", "FixedNonLinear"]
+
 
 class NonLinear(DistributionMap):
     """

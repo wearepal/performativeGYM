@@ -8,6 +8,8 @@ from jax import Array, grad
 
 from .optimizer import Optimizer, LossFn, Generic, Y
 
+__all__ = ["RRM"]
+
 
 class _Tolerance(NamedTuple):
     tol: float

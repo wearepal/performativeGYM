@@ -4,6 +4,8 @@ from jax import Array
 
 from .distribution_map import DistributionMap
 
+__all__ = ["Mixture", "FixedMixture"]
+
 class Mixture(DistributionMap):
     """
     Mixture of Gaussians distribution map.
