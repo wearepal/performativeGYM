@@ -7,6 +7,8 @@ import jax
 
 from jax import Array
 
+__all__ = ["DFO"]
+
 
 class DFO(Optimizer[Y], Generic[Y]):
     """

@@ -8,6 +8,8 @@ import jax
 from .distribution_map import DistributionMap
 from .datasets import CreditDataset
 
+__all__ = ["StrategicClassification"]
+
 class StrategicClassification(DistributionMap):
     """
     Strategic classification distribution map.

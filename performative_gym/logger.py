@@ -26,39 +26,24 @@ class Logger:
         login: bool = True,
     ):
         self.log_type = log_type
+        self.login = login
 
         match log_type:
             case Log.WANDB:
                 wandb.init(project=project, group=group, name=name, config=config)
-                self.config = wandb.config
             case Log.OFFLINE:
                 self.save_dir = os.path.join("data", group, name + ".json")
-                self.config = config
                 self.data = {}
                 if not os.path.exists(os.path.join("data", group)):
                     os.mkdir(os.path.join("data", group))
             case Log.ML_FLOW:
                 import mlflow
-                if login:
+                if self.login:
                     mlflow.login()
                     mlflow.set_experiment(project)
                     mlflow.start_run(run_name=name)
-                else:
-                    mlflow.start_run()
                 mlflow.set_tag("group", group)
                 mlflow.log_params(config)
-
-    def update_config(self, config: dict[str, Any]) -> None:
-        match self.log_type:
-            case Log.WANDB:
-                wandb.config.update(config)
-                self.config = wandb.config
-            case Log.OFFLINE:
-                self.config.update(config)
-            case Log.ML_FLOW:
-                import mlflow
-                mlflow.log_params(config)
-                self.config.update(config)
 
     def finish(self) -> None:
         match self.log_type:
@@ -71,7 +56,8 @@ class Logger:
                 # pd.DataFrame(self.data).to_csv(self.save_dir, index=False)
             case Log.ML_FLOW:
                 import mlflow
-                mlflow.end_run()
+                if self.login:
+                    mlflow.end_run()
 
     def log(self, data: dict[str, Any], step: int) -> None:
         match self.log_type:

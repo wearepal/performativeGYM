@@ -2,6 +2,8 @@ from abc import abstractmethod
 
 from jax import Array
 
+__all__ = ["DistributionMap"]
+
 class DistributionMap:
     def __init__(
             self,

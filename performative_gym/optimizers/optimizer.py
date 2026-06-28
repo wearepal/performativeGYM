@@ -4,6 +4,8 @@ from collections.abc import Callable
 
 from jax import Array
 
+__all__ = ["BaseOptimizer", "LossFn", "Objective", "Optimizer", "Optimizers"]
+
 Optimizers: TypeAlias = Literal[
     "RGD",
     "PerfGDReparam",

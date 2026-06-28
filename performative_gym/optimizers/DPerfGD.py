@@ -10,6 +10,8 @@ import jax
 
 from jax import Array, grad
 
+__all__ = ["DPerfGD"]
+
 #TODO: implement Reg, Barrier version
 
 class DPerfGD(Optimizer[Y], Generic[Y]):  # Decoupled Gradient Descent

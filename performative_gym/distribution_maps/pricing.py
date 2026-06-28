@@ -6,6 +6,8 @@ from functools import cached_property
 
 from .distribution_map import DistributionMap
 
+__all__ = ["Pricing"]
+
 class Pricing(DistributionMap):
     """
     Pricing Gaussian distribution map.
