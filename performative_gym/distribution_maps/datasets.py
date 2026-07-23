@@ -6,7 +6,7 @@ import jax
 import numpy as np
 from numpy import typing as npt
 import pandas as pd
-from sklearn import preprocessing
+from sklearn.preprocessing import StandardScaler
 
 
 class CreditDataset:
@@ -86,6 +86,16 @@ class CreditDataset:
     labels : ndarray of shape (n,)
         Binary labels indicating default status.
 
+    standard_scaler : sklearn.preprocessing.StandardScaler
+        The scaler fitted on the raw (pre-bias) features. Its ``mean_`` and
+        ``scale_`` attributes can be used to reproduce the standardization for
+        new inputs at inference time. The scaler covers the raw features only;
+        the appended bias term is not part of it.
+
+    feature_names : list of str
+        Names of the raw features, in the same column order the scaler expects
+        (i.e. excluding the appended bias term).
+
     Properties
     ----------
     num_agents : int
@@ -101,6 +111,12 @@ class CreditDataset:
         .. math::
 
             d = \\text{features.shape}[1].
+
+    feature_mean : ndarray of shape (d-1,)
+        Per-feature mean used for standardization (raw features, no bias).
+
+    feature_std : ndarray of shape (d-1,)
+        Per-feature standard deviation used for standardization (raw features, no bias).
 
     Methods
     -------
@@ -126,7 +142,8 @@ class CreditDataset:
 
         self.datapath = datapath
         self.seed = seed
-        self.features, self.labels = self.load_data(self.seed)
+        self.standard_scaler = StandardScaler()
+        self.features, self.labels, self.feature_names = self._load_data(self.seed)
 
     @property
     def num_agents(self):
@@ -138,15 +155,39 @@ class CreditDataset:
         """Compute number of features for each agent."""
         return self.features.shape[1]
 
+    @property
+    def feature_mean(self) -> npt.NDArray:
+        """Per-feature mean used for standardization (raw features, no bias)."""
+        mean = self.standard_scaler.mean_
+        assert mean is not None, "Scaler has not been fitted yet."
+        return mean
+
+    @property
+    def feature_std(self) -> npt.NDArray:
+        """Per-feature standard deviation used for standardization (raw features, no bias)."""
+        scale = self.standard_scaler.scale_
+        assert scale is not None, "Scaler has not been fitted yet."
+        return scale
+
     def load_data(self, seed: int) -> tuple[npt.NDArray, npt.NDArray]:
+        """Load the (features, labels) for the given seed.
+
+        Kept for backwards compatibility; delegates to :meth:`_load_data` and
+        drops the feature names from the return value.
+        """
+        features, labels, _ = self._load_data(seed)
+        return features, labels
+
+    def _load_data(self, seed: int) -> tuple[npt.NDArray, npt.NDArray, list[str]]:
         key = jax.random.PRNGKey(seed)
 
         data = pd.read_csv(self.datapath, index_col=0)
         data.dropna(inplace=True)
 
         features = data.drop("SeriousDlqin2yrs", axis=1)
+        feature_names = list(features.columns)
         # zero mean, unit variance
-        features = preprocessing.scale(features)
+        features = self.standard_scaler.fit_transform(features)
 
         # add bias term
         features = np.append(features, np.ones((features.shape[0], 1)), axis=1)
@@ -162,7 +203,7 @@ class CreditDataset:
 
         # shuffle arrays
         shuffled = jax.random.permutation(key, len(indices))
-        return features_balanced[shuffled], outcomes_balanced[shuffled]
+        return features_balanced[shuffled], outcomes_balanced[shuffled], feature_names
 
     def __len__(self):
         return len(self.labels)
