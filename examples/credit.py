@@ -128,7 +128,7 @@ class CreditExp:
 
         def log_distr(distr: Array) -> Array:
             epsilon = 1e-12
-            return jnp.log(jnp.clip(distr, a_min=epsilon, a_max=None))
+            return jnp.log(jnp.clip(distr, min=epsilon))
 
         cov = jnp.diag(jnp.ones(x.shape[1]))
         return log_distr(normal(x, mean, cov))
