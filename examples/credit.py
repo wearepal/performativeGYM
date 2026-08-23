@@ -88,20 +88,30 @@ class CreditExp:
     def init_model(self) -> Array:
         match self.model:
             case "NN":
+
                 def forward(x: Array) -> Array:
-                    mlp = hk.Sequential([hk.Linear(100), jax.nn.relu, hk.Linear(1)])
+                    mlp = hk.Sequential(
+                        [hk.Linear(100, with_bias=True), jax.nn.relu, hk.Linear(1)]
+                    )
                     return mlp(x).squeeze()
 
                 model = hk.without_apply_rng(hk.transform(forward))
                 self.h = jax.jit(model.apply)
-                params = model.init(jax.random.PRNGKey(self.seed), jnp.zeros((1, 11)))
+                # `hk.Linear` has its own bias, so no explicit bias term is needed.
+                params = model.init(
+                    jax.random.PRNGKey(self.seed),
+                    jnp.zeros((1, self.dataset.num_features)),
+                )
                 return params
             case "logistic_regression":
-                self.h = lambda params, x: x @ params
-                return initialize_params((11,), self.seed)
+                # The last entry of `params` is the bias term; it is a parameter
+                # rather than a feature, so the distribution map cannot shift it.
+                self.h = lambda params, x: x @ params[:-1] + params[-1]
+                return initialize_params((self.dataset.num_features + 1,), self.seed)
 
-    def init_data(self) -> None:
-        self.dataset = CreditDataset(datafile=self.datafile, seed=self.seed)
+    @cached_property
+    def dataset(self) -> CreditDataset:
+        return CreditDataset(datafile=self.datafile, seed=self.seed)
 
     def proj_fn(self, params: Array) -> Array:
         def fn(x: Array) -> Array:
@@ -132,7 +142,7 @@ class CreditExp:
         return jnp.mean(self.loss_fn(p, x=x, y=y))
 
     def train(self, optimizer_name: Optimizers) -> Optimizer:
-        self.init_data()
+        _ = self.dataset  # load the data up front, outside of the training loop
         start_time = time.time()
         match self.logging:
             case "wandb":

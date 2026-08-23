@@ -43,16 +43,7 @@ class CreditDataset:
 
            x \\leftarrow \\frac{x - \\mu}{\\sigma}.
 
-    3. **Bias augmentation**:
-       A constant feature equal to 1 is appended to each data point:
-
-       .. math::
-
-           x \\leftarrow (x, 1),
-
-       which allows linear models to incorporate an intercept term.
-
-    4. **Class balancing**:
+    3. **Class balancing**:
        The dataset is subsampled to obtain equal numbers of positive and negative
        examples:
 
@@ -60,7 +51,7 @@ class CreditDataset:
 
            |\\{i : y_i = 1\\}| = |\\{i : y_i = 0\\}|.
 
-    5. **Shuffling**:
+    4. **Shuffling**:
        The dataset is randomly permuted using a JAX PRNG key.
 
     Parameters
@@ -81,20 +72,18 @@ class CreditDataset:
         Random seed used for data processing.
 
     features : ndarray of shape (n, d)
-        Preprocessed feature matrix, including the bias term.
+        Preprocessed feature matrix.
 
     labels : ndarray of shape (n,)
         Binary labels indicating default status.
 
     standard_scaler : sklearn.preprocessing.StandardScaler
-        The scaler fitted on the raw (pre-bias) features. Its ``mean_`` and
-        ``scale_`` attributes can be used to reproduce the standardization for
-        new inputs at inference time. The scaler covers the raw features only;
-        the appended bias term is not part of it.
+        The scaler fitted on the features. Its ``mean_`` and ``scale_``
+        attributes can be used to reproduce the standardization for new inputs
+        at inference time.
 
     feature_names : list of str
-        Names of the raw features, in the same column order the scaler expects
-        (i.e. excluding the appended bias term).
+        Names of the features, in the same column order the scaler expects.
 
     Properties
     ----------
@@ -106,17 +95,17 @@ class CreditDataset:
             n = \\text{features.shape}[0].
 
     num_features : int
-        Number of features per sample (including the bias term):
+        Number of features per sample:
 
         .. math::
 
             d = \\text{features.shape}[1].
 
-    feature_mean : ndarray of shape (d-1,)
-        Per-feature mean used for standardization (raw features, no bias).
+    feature_mean : ndarray of shape (d,)
+        Per-feature mean used for standardization.
 
-    feature_std : ndarray of shape (d-1,)
-        Per-feature standard deviation used for standardization (raw features, no bias).
+    feature_std : ndarray of shape (d,)
+        Per-feature standard deviation used for standardization.
 
     Methods
     -------
@@ -131,8 +120,12 @@ class CreditDataset:
     -----
     - The balancing step reduces the dataset size to twice the number of positive
       examples, ensuring equal class proportions.
-    - The added bias feature simplifies the use of linear models by avoiding the
-      need for a separate intercept parameter.
+    - No constant column is appended to the features. An intercept is a model
+      parameter, not a feature, and a performative distribution map such as
+      :class:`~.StrategicClassification` shifts every feature column: a constant
+      column would be shifted along with the real features, which is not a
+      meaningful strategic response. Models needing an intercept must carry it
+      in their parameters.
     - Shuffling is performed using JAX for consistency with the rest of the codebase.
     """
 
@@ -189,8 +182,6 @@ class CreditDataset:
         # zero mean, unit variance
         features = self.standard_scaler.fit_transform(features)
 
-        # add bias term
-        features = np.append(features, np.ones((features.shape[0], 1)), axis=1)
         outcomes = np.array(data["SeriousDlqin2yrs"])  # 120000 samples
 
         # balance classes

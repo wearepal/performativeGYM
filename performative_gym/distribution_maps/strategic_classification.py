@@ -127,6 +127,12 @@ class StrategicClassification(DistributionMap):
     locally modify their features in the direction that most improves their
     score under the current deployed model.
 
+    Every column of the feature matrix is shifted, so the features must consist
+    only of genuine, manipulable quantities. In particular, a model's intercept
+    must be part of :math:`\\theta` and must not be encoded as a constant
+    feature column, which would otherwise be shifted like a real feature. For
+    this reason, :class:`~.CreditDataset` does not append a bias column.
+
     At present, only the ``"giveMeSomeCredit"`` dataset is supported.
     """
 

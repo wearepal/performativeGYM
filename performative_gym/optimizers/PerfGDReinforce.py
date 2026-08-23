@@ -179,7 +179,9 @@ class PerfGDReinforce(Optimizer[Y], Generic[Y]):
         )(self.f_fn(params, x, y))
 
         # for pricing and binary classification
-        perf_gradients = delta_f_theta @ jnp.mean(jacobians * loss_ft, axis=0)
+        # `delta_f_theta` is the Jacobian df/dtheta of shape (dim(f), dim(theta)),
+        # so it has to be transposed to contract over f and leave theta free.
+        perf_gradients = delta_f_theta.T @ jnp.mean(jacobians * loss_ft, axis=0)
 
         return perf_gradients
 
