@@ -8,6 +8,7 @@ import jax
 import optax
 
 from jax import Array, grad, jacobian
+from jax.flatten_util import ravel_pytree
 
 __all__ = ["PerfGDReinforce"]
 
@@ -58,7 +59,10 @@ class PerfGDReinforce(Optimizer[Y], Generic[Y]):
     Parameters
     ----------
     params : Array
-        Initial model parameters :math:`\\theta`.
+        Initial model parameters :math:`\\theta`. This may be any pytree, such as
+        the parameter dict of a haiku model; the finite-difference estimate of
+        :math:`\\mathrm{d}f / \\mathrm{d}\\theta` ravels it into a vector and the
+        resulting gradient is returned in the same structure.
 
     lr : float
         Learning rate used by the base optimizer.
@@ -160,11 +164,14 @@ class PerfGDReinforce(Optimizer[Y], Generic[Y]):
 
 
     def delta_f_theta(self):
-        # Estimating the second part of the performative gradient
-        delta_theta = (
-                jnp.array(self.params_history[self.i - self.H: self.i])
-                - self.params_history[self.i]
-        ).T
+        # Estimating the second part of the performative gradient.
+        # The parameters may be an arbitrary pytree (such as the parameter dict of
+        # a haiku model), so the iterates are raveled into vectors first.
+        flat_params = [
+            ravel_pytree(p)[0]
+            for p in self.params_history[self.i - self.H: self.i + 1]
+        ]
+        delta_theta = (jnp.stack(flat_params[:-1]) - flat_params[-1]).T
         delta_f = (
                 jnp.array(self.f_history[self.i - self.H: self.i]) - self.f_history[self.i]
         ).T
@@ -183,7 +190,9 @@ class PerfGDReinforce(Optimizer[Y], Generic[Y]):
         # so it has to be transposed to contract over f and leave theta free.
         perf_gradients = delta_f_theta.T @ jnp.mean(jacobians * loss_ft, axis=0)
 
-        return perf_gradients
+        # `perf_gradients` is a flat vector; restore the structure of `params`.
+        unravel = ravel_pytree(params)[1]
+        return unravel(perf_gradients)
 
     def step(self, params: Array, x: Array, y: Y) -> Array:
         self.f_history.append(self.f_fn(params, x, y))
