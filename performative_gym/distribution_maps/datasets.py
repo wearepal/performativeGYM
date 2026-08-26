@@ -44,16 +44,16 @@ class CreditDataset:
 
            |\\{i : y_i = 1\\}| = |\\{i : y_i = 0\\}|.
 
-    3. **Feature standardization**:
+    3. **Shuffling**:
+       The dataset is randomly permuted using a JAX PRNG key.
+
+    4. **Feature standardization**:
        Features are normalized to zero mean and unit variance, using statistics
        computed on the balanced subset:
 
        .. math::
 
            x \\leftarrow \\frac{x - \\mu}{\\sigma}.
-
-    4. **Shuffling**:
-       The dataset is randomly permuted using a JAX PRNG key.
 
     Parameters
     ----------
@@ -187,16 +187,17 @@ class CreditDataset:
         # balance classes
         default_indices = np.where((outcomes == 1))[0]  # 8000
         other_indices = np.where((outcomes == 0))[0][: len(default_indices)]  # 112000
-        indices = np.concatenate((default_indices, other_indices))
+        balanced_indices = np.concatenate((default_indices, other_indices))
 
-        outcomes_balanced = outcomes[indices]
+        # shuffle indices
+        shuffled = jax.random.permutation(key, balanced_indices)
+
+        outcomes_balanced = outcomes[shuffled]
 
         # zero mean, unit variance (fitted on the balanced subset)
-        features_balanced = self.standard_scaler.fit_transform(features[indices])
+        features_balanced = self.standard_scaler.fit_transform(features[shuffled])
 
-        # shuffle arrays
-        shuffled = jax.random.permutation(key, len(indices))
-        return features_balanced[shuffled], outcomes_balanced[shuffled], feature_names
+        return features_balanced, outcomes_balanced, feature_names
 
     def __len__(self):
         return len(self.labels)
