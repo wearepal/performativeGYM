@@ -238,7 +238,50 @@ class CreditDataset:
         return self.standard_scaler.inverse_transform(features)
 
 
-def test_standardization_roundtrip(seed: int = 0, tolerance: float = 1e-10) -> None:
+_ROUNDTRIP_TOLERANCE = 1e-10
+
+
+def _reconstruction_error(
+    seed: int,
+) -> tuple[CreditDataset, npt.NDArray, npt.NDArray]:
+    """Round-trip the dataset through the scaler and measure what that costs.
+
+    Returns the dataset along with the per-element absolute and relative errors
+    of ``unstandardize(features)`` against the raw features, both of shape
+    ``(n, d)``.
+    """
+    dataset = CreditDataset(seed=seed)
+    raw, raw_labels = dataset.load_raw_data(seed)
+
+    # the standardized and the raw path have to agree on the columns and rows
+    assert list(raw.columns) == dataset.feature_names
+    assert np.array_equal(raw_labels, dataset.labels)
+
+    original = raw.to_numpy()
+    reconstructed = dataset.unstandardize(dataset.features)
+    assert reconstructed.shape == original.shape
+
+    abs_err = np.abs(reconstructed - original)
+    # Relative error, with a floor of 1 in the denominator: many columns are
+    # small counts (and often exactly 0), where an absolute comparison is the
+    # meaningful one.
+    return dataset, abs_err, abs_err / np.maximum(np.abs(original), 1.0)
+
+
+def _assert_within_tolerance(
+    dataset: CreditDataset, rel_err: npt.NDArray, tolerance: float
+) -> None:
+    """Fail if any entry of ``rel_err`` reaches ``tolerance``."""
+    worst = rel_err.max()
+    assert worst < tolerance, (
+        f"worst relative reconstruction error {worst:.3e} exceeds {tolerance:.0e} "
+        f"(feature {dataset.feature_names[int(rel_err.max(axis=0).argmax())]})"
+    )
+
+
+def test_standardization_roundtrip(
+    seed: int = 0, tolerance: float = _ROUNDTRIP_TOLERANCE
+) -> None:
     """Check that :meth:`CreditDataset.unstandardize` recovers the original data.
 
     The standardized features are the only form in which the pipeline keeps the
@@ -247,36 +290,16 @@ def test_standardization_roundtrip(seed: int = 0, tolerance: float = 1e-10) -> N
     has to go back through the scaler. This checks that the round-trip loses
     nothing beyond floating point round-off.
     """
-    dataset = CreditDataset(seed=seed)
-    raw, raw_labels = dataset.load_raw_data(seed)
-    assert list(raw.columns) == dataset.feature_names
-    original = raw.to_numpy()
-
-    # the standardized and the raw path have to agree on the row order
-    assert np.array_equal(raw_labels, dataset.labels)
-
-    reconstructed = dataset.unstandardize(dataset.features)
-    assert reconstructed.shape == original.shape
-
-    # Relative error, with a floor of 1 in the denominator: many columns are
-    # small counts (and often exactly 0), where an absolute comparison is the
-    # meaningful one.
-    error = np.abs(reconstructed - original) / np.maximum(np.abs(original), 1.0)
-    worst = error.max()
-    assert worst < tolerance, (
-        f"worst relative reconstruction error {worst:.3e} exceeds {tolerance:.0e} "
-        f"(feature {dataset.feature_names[int(error.max(axis=0).argmax())]})"
-    )
+    dataset, _, rel_err = _reconstruction_error(seed)
+    _assert_within_tolerance(dataset, rel_err, tolerance)
 
 
 if __name__ == "__main__":
+    # The same round-trip the test above asserts on, but reported per feature:
+    # the assertion only says pass or fail, this says how much room is left
+    # under the tolerance and against what scale the error should be read.
     seed = 0
-    dataset = CreditDataset(seed=seed)
-    original = dataset.load_raw_data(seed)[0].to_numpy()
-    reconstructed = dataset.unstandardize(dataset.features)
-
-    abs_err = np.abs(reconstructed - original)
-    rel_err = abs_err / np.maximum(np.abs(original), 1.0)
+    dataset, abs_err, rel_err = _reconstruction_error(seed)
 
     name_width = max(len(name) for name in dataset.feature_names)
     print(f"reconstruction error over {len(dataset)} rows (seed {seed}):\n")
@@ -288,5 +311,5 @@ if __name__ == "__main__":
         )
     print(f"\nworst relative error: {rel_err.max():.3e}")
 
-    test_standardization_roundtrip(seed=seed)
+    _assert_within_tolerance(dataset, rel_err, _ROUNDTRIP_TOLERANCE)
     print("test_standardization_roundtrip: OK")
