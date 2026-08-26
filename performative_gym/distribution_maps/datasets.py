@@ -36,20 +36,21 @@ class CreditDataset:
     1. **Missing values removal**:
        All rows containing missing entries are dropped.
 
-    2. **Feature standardization**:
-       Features are normalized to zero mean and unit variance:
-
-       .. math::
-
-           x \\leftarrow \\frac{x - \\mu}{\\sigma}.
-
-    3. **Class balancing**:
+    2. **Class balancing**:
        The dataset is subsampled to obtain equal numbers of positive and negative
        examples:
 
        .. math::
 
            |\\{i : y_i = 1\\}| = |\\{i : y_i = 0\\}|.
+
+    3. **Feature standardization**:
+       Features are normalized to zero mean and unit variance, using statistics
+       computed on the balanced subset:
+
+       .. math::
+
+           x \\leftarrow \\frac{x - \\mu}{\\sigma}.
 
     4. **Shuffling**:
        The dataset is randomly permuted using a JAX PRNG key.
@@ -177,10 +178,9 @@ class CreditDataset:
         data = pd.read_csv(self.datapath, index_col=0)
         data.dropna(inplace=True)
 
-        features = data.drop("SeriousDlqin2yrs", axis=1)
-        feature_names = list(features.columns)
-        # zero mean, unit variance
-        features = self.standard_scaler.fit_transform(features)
+        features_df = data.drop("SeriousDlqin2yrs", axis=1)
+        feature_names = list(features_df.columns)
+        features = features_df.to_numpy()
 
         outcomes = np.array(data["SeriousDlqin2yrs"])  # 120000 samples
 
@@ -189,8 +189,10 @@ class CreditDataset:
         other_indices = np.where((outcomes == 0))[0][: len(default_indices)]  # 112000
         indices = np.concatenate((default_indices, other_indices))
 
-        features_balanced = features[indices]
         outcomes_balanced = outcomes[indices]
+
+        # zero mean, unit variance (fitted on the balanced subset)
+        features_balanced = self.standard_scaler.fit_transform(features[indices])
 
         # shuffle arrays
         shuffled = jax.random.permutation(key, len(indices))
