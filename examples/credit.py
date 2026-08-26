@@ -12,7 +12,6 @@ from jax.typing import ArrayLike
 from optax.losses import sigmoid_binary_cross_entropy  # type: ignore
 from tqdm.auto import tqdm
 
-from performative_gym.distribution_maps.datasets import CreditDataset
 from performative_gym import (
     DFO,
     RGD,
@@ -55,8 +54,6 @@ class CreditExp:
     reg: float = 0
     """Regularization parameter for the logistic regression model."""
     rho: float = 0
-    datafile: str = "credit_data.zip"
-    """Data file containing the credit dataset."""
 
     @cached_property
     def distribution_map(self):
@@ -100,18 +97,16 @@ class CreditExp:
                 # `hk.Linear` has its own bias, so no explicit bias term is needed.
                 params = model.init(
                     jax.random.PRNGKey(self.seed),
-                    jnp.zeros((1, self.dataset.num_features)),
+                    jnp.zeros((1, self.distribution_map.dataset.num_features)),
                 )
                 return params
             case "logistic_regression":
                 # The last entry of `params` is the bias term; it is a parameter
                 # rather than a feature, so the distribution map cannot shift it.
                 self.h = lambda params, x: x @ params[:-1] + params[-1]
-                return initialize_params((self.dataset.num_features + 1,), self.seed)
-
-    @cached_property
-    def dataset(self) -> CreditDataset:
-        return CreditDataset(datafile=self.datafile, seed=self.seed)
+                return initialize_params(
+                    (self.distribution_map.dataset.num_features + 1,), self.seed
+                )
 
     def proj_fn(self, params: Array) -> Array:
         def fn(x: Array) -> Array:
@@ -142,7 +137,6 @@ class CreditExp:
         return jnp.mean(self.loss_fn(p, x=x, y=y))
 
     def train(self, optimizer_name: Optimizers) -> Optimizer:
-        _ = self.dataset  # load the data up front, outside of the training loop
         start_time = time.time()
         match self.logging:
             case "wandb":
