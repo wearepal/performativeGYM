@@ -12,7 +12,6 @@ from jax.typing import ArrayLike
 from optax.losses import sigmoid_binary_cross_entropy  # type: ignore
 from tqdm.auto import tqdm
 
-from performative_gym.distribution_maps.datasets import CreditDataset
 from performative_gym import (
     DFO,
     RGD,
@@ -55,8 +54,6 @@ class CreditExp:
     reg: float = 0
     """Regularization parameter for the logistic regression model."""
     rho: float = 0
-    datafile: str = "credit_data.zip"
-    """Data file containing the credit dataset."""
 
     @cached_property
     def distribution_map(self):
@@ -88,20 +85,28 @@ class CreditExp:
     def init_model(self) -> Array:
         match self.model:
             case "NN":
+
                 def forward(x: Array) -> Array:
-                    mlp = hk.Sequential([hk.Linear(100), jax.nn.relu, hk.Linear(1)])
+                    mlp = hk.Sequential(
+                        [hk.Linear(100, with_bias=True), jax.nn.relu, hk.Linear(1)]
+                    )
                     return mlp(x).squeeze()
 
                 model = hk.without_apply_rng(hk.transform(forward))
                 self.h = jax.jit(model.apply)
-                params = model.init(jax.random.PRNGKey(self.seed), jnp.zeros((1, 11)))
+                # `hk.Linear` has its own bias, so no explicit bias term is needed.
+                params = model.init(
+                    jax.random.PRNGKey(self.seed),
+                    jnp.zeros((1, self.distribution_map.dataset.num_features)),
+                )
                 return params
             case "logistic_regression":
-                self.h = lambda params, x: x @ params
-                return initialize_params((11,), self.seed)
-
-    def init_data(self) -> None:
-        self.dataset = CreditDataset(datafile=self.datafile, seed=self.seed)
+                # The last entry of `params` is the bias term; it is a parameter
+                # rather than a feature, so the distribution map cannot shift it.
+                self.h = lambda params, x: x @ params[:-1] + params[-1]
+                return initialize_params(
+                    (self.distribution_map.dataset.num_features + 1,), self.seed
+                )
 
     def proj_fn(self, params: Array) -> Array:
         def fn(x: Array) -> Array:
@@ -118,7 +123,7 @@ class CreditExp:
 
         def log_distr(distr: Array) -> Array:
             epsilon = 1e-12
-            return jnp.log(jnp.clip(distr, a_min=epsilon, a_max=None))
+            return jnp.log(jnp.clip(distr, min=epsilon))
 
         cov = jnp.diag(jnp.ones(x.shape[1]))
         return log_distr(normal(x, mean, cov))
@@ -132,7 +137,6 @@ class CreditExp:
         return jnp.mean(self.loss_fn(p, x=x, y=y))
 
     def train(self, optimizer_name: Optimizers) -> Optimizer:
-        self.init_data()
         start_time = time.time()
         match self.logging:
             case "wandb":
