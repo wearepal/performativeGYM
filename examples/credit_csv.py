@@ -34,7 +34,7 @@ from numpy import typing as npt
 from examples.credit import CreditExp
 from performative_gym import PerfGDReparam
 from performative_gym.distribution_maps.datasets import CreditDataset
-from performative_gym.optimizers import BaseOptimizer
+from performative_gym.optimizers import BaseOptimizer, Optimizers
 
 jax.config.update("jax_enable_x64", True)
 
@@ -45,19 +45,20 @@ class CreditCsv:
 
     out_dir: Path = Path("data")
     """Directory the CSV files are written to."""
-    output_file: str = "credit"
-    """Prefix of the written files: `<output_file>_raw.csv` and `<output_file>_shifted.csv`."""
     epsilon: float = 10
     """Epsilon for the data distribution shift; higher values lead to more significant shifts."""
     n: int = 120_000
     """Number of samples to use; the balanced credit dataset is smaller than this, so all of it."""
     seed: int = 10
-    lr: float = 0.1
-    """Learning rate for the optimizer."""
-    model: Literal["NN", "logistic_regression"] = "NN"
-    """Model type, either 'NN' for a neural network or 'logistic_regression'."""
+    optimizer: Optimizers = "PerfGDReparam"
     base_optimizer: BaseOptimizer = "GD"
     momentum: float = 0
+    output_file: str = "credit"
+    """Prefix of the written files: `<output_file>_raw.csv` and `<output_file>_shifted.csv`."""
+    model: Literal["NN", "logistic_regression"] = "NN"
+    """Model type, either 'NN' for a neural network or 'logistic_regression'."""
+    lr: float = 0.1
+    """Learning rate for the optimizer."""
 
     def run(self) -> None:
         # Reuse the experiment definition from `credit.py` for the model, the
@@ -77,15 +78,18 @@ class CreditCsv:
         distribution_map = exp.distribution_map
         dataset = distribution_map.dataset
 
-        optimizer = PerfGDReparam(
-            params,
-            lr=exp.lr,
-            loss_fn=exp.loss_fn,
-            proj_fn=exp.proj_fn,
-            distr_map=distribution_map.sample,
-            base_optimizer=exp.base_optimizer,
-            momentum=exp.momentum,
-        )
+        if self.optimizer == "PerfGDReparam":
+            optimizer = PerfGDReparam(
+                params,
+                lr=exp.lr,
+                loss_fn=exp.loss_fn,
+                proj_fn=exp.proj_fn,
+                distr_map=distribution_map.sample,
+                base_optimizer=exp.base_optimizer,
+                momentum=exp.momentum,
+            )
+        else:
+            raise NotImplementedError(f"optimizer {self.optimizer} not implemented")
 
         self.out_dir.mkdir(parents=True, exist_ok=True)
         self._write_csv(
@@ -105,7 +109,14 @@ class CreditCsv:
         x_1, y_1 = distribution_map.sample(params)
 
         self._write_csv(
-            dataset, x_1, y_1, self.out_dir / f"{self.output_file}_shifted.csv"
+            dataset, x_1, y_1, self.out_dir / f"{self.output_file}_shifted1.csv"
+        )
+
+        params = optimizer.step(params, x=x_1, y=y_1)
+        x_2, y_2 = distribution_map.sample(params)
+
+        self._write_csv(
+            dataset, x_2, y_2, self.out_dir / f"{self.output_file}_shifted2.csv"
         )
 
     def _write_csv(
