@@ -55,6 +55,9 @@ class CreditDataset:
 
            x \\leftarrow \\frac{x - \\mu}{\\sigma}.
 
+    Steps 1 to 3 are available on their own via :meth:`load_raw_data`, and
+    step 4 can be undone via :meth:`unstandardize`.
+
     Parameters
     ----------
     datafile : str, default="credit_data.zip"
@@ -114,6 +117,14 @@ class CreditDataset:
         Load, preprocess, balance, and shuffle the dataset. Returns the feature
         matrix and label vector.
 
+    load_raw_data(seed: int) -> tuple[DataFrame, ndarray]
+        Steps 1 to 3 only, so the features are in their original units but
+        already in the final row order.
+
+    unstandardize(features: ndarray) -> ndarray
+        Inverse of the standardization: rescale by ``feature_std`` and shift by
+        ``feature_mean``.
+
     __len__() -> int
         Return the number of samples in the dataset.
 
@@ -172,16 +183,19 @@ class CreditDataset:
         features, labels, _ = self._load_data(seed)
         return features, labels
 
-    def _load_data(self, seed: int) -> tuple[npt.NDArray, npt.NDArray, list[str]]:
+    def load_raw_data(self, seed: int) -> tuple[pd.DataFrame, npt.NDArray]:
+        """Load the balanced and shuffled (features, labels), in the original units.
+
+        Applies steps 1 to 3 of the pipeline only -- dropping NAs, splitting off
+        the outcome, balancing the classes and shuffling -- so the rows line up
+        with :attr:`features` but are not standardized.
+        """
         key = jax.random.PRNGKey(seed)
 
         data = pd.read_csv(self.datapath, index_col=0)
         data.dropna(inplace=True)
 
         features_df = data.drop("SeriousDlqin2yrs", axis=1)
-        feature_names = list(features_df.columns)
-        features = features_df.to_numpy()
-
         outcomes = np.array(data["SeriousDlqin2yrs"])  # 120000 samples
 
         # balance classes
@@ -190,14 +204,112 @@ class CreditDataset:
         balanced_indices = np.concatenate((default_indices, other_indices))
 
         # shuffle indices
-        shuffled = jax.random.permutation(key, balanced_indices)
+        shuffled = np.asarray(jax.random.permutation(key, balanced_indices))
 
-        outcomes_balanced = outcomes[shuffled]
+        # `shuffled` holds positional indices, so index positionally: the
+        # DataFrame index has gaps in it after dropping the NAs.
+        return features_df.iloc[shuffled], outcomes[shuffled]
 
-        # zero mean, unit variance (fitted on the balanced subset)
-        features_balanced = self.standard_scaler.fit_transform(features[shuffled])
+    def _load_data(self, seed: int) -> tuple[npt.NDArray, npt.NDArray, list[str]]:
+        features_df, outcomes_balanced = self.load_raw_data(seed)
+        feature_names = list(features_df.columns)
+
+        # zero mean, unit variance (fitted on the balanced subset). The row
+        # slice in `load_raw_data` makes `to_numpy()` come out Fortran-ordered;
+        # `ascontiguousarray` keeps the scaler's summation order -- and hence
+        # its mean and scale down to the last bit -- what it was before.
+        features_balanced = self.standard_scaler.fit_transform(
+            np.ascontiguousarray(features_df.to_numpy())
+        )
 
         return features_balanced, outcomes_balanced, feature_names
 
     def __len__(self):
         return len(self.labels)
+
+    def unstandardize(self, features: npt.NDArray) -> npt.NDArray:
+        """Map standardized features back to the original units.
+
+        Applies the inverse of the fitted scaler, i.e.
+        ``x * feature_std + feature_mean``. This is the inverse of step 4 of the
+        pipeline, up to floating point round-off; see
+        :func:`test_standardization_roundtrip`.
+        """
+        return self.standard_scaler.inverse_transform(features)
+
+
+_ROUNDTRIP_TOLERANCE = 1e-10
+
+
+def _reconstruction_error(
+    seed: int,
+) -> tuple[CreditDataset, npt.NDArray, npt.NDArray]:
+    """Round-trip the dataset through the scaler and measure what that costs.
+
+    Returns the dataset along with the per-element absolute and relative errors
+    of ``unstandardize(features)`` against the raw features, both of shape
+    ``(n, d)``.
+    """
+    dataset = CreditDataset(seed=seed)
+    raw, raw_labels = dataset.load_raw_data(seed)
+
+    # the standardized and the raw path have to agree on the columns and rows
+    assert list(raw.columns) == dataset.feature_names
+    assert np.array_equal(raw_labels, dataset.labels)
+
+    original = raw.to_numpy()
+    reconstructed = dataset.unstandardize(dataset.features)
+    assert reconstructed.shape == original.shape
+
+    abs_err = np.abs(reconstructed - original)
+    # Relative error, with a floor of 1 in the denominator: many columns are
+    # small counts (and often exactly 0), where an absolute comparison is the
+    # meaningful one.
+    return dataset, abs_err, abs_err / np.maximum(np.abs(original), 1.0)
+
+
+def _assert_within_tolerance(
+    dataset: CreditDataset, rel_err: npt.NDArray, tolerance: float
+) -> None:
+    """Fail if any entry of ``rel_err`` reaches ``tolerance``."""
+    worst = rel_err.max()
+    assert worst < tolerance, (
+        f"worst relative reconstruction error {worst:.3e} exceeds {tolerance:.0e} "
+        f"(feature {dataset.feature_names[int(rel_err.max(axis=0).argmax())]})"
+    )
+
+
+def test_standardization_roundtrip(
+    seed: int = 0, tolerance: float = _ROUNDTRIP_TOLERANCE
+) -> None:
+    """Check that :meth:`CreditDataset.unstandardize` recovers the original data.
+
+    The standardized features are the only form in which the pipeline keeps the
+    data around, so anything that wants the data in its original units (an
+    export to CSV, say, or a shifted sample coming out of a distribution map)
+    has to go back through the scaler. This checks that the round-trip loses
+    nothing beyond floating point round-off.
+    """
+    dataset, _, rel_err = _reconstruction_error(seed)
+    _assert_within_tolerance(dataset, rel_err, tolerance)
+
+
+if __name__ == "__main__":
+    # The same round-trip the test above asserts on, but reported per feature:
+    # the assertion only says pass or fail, this says how much room is left
+    # under the tolerance and against what scale the error should be read.
+    seed = 0
+    dataset, abs_err, rel_err = _reconstruction_error(seed)
+
+    name_width = max(len(name) for name in dataset.feature_names)
+    print(f"reconstruction error over {len(dataset)} rows (seed {seed}):\n")
+    print(f"{'feature':{name_width}s} {'scale':>12s} {'max abs':>12s} {'max rel':>12s}")
+    for i, name in enumerate(dataset.feature_names):
+        print(
+            f"{name:{name_width}s} {dataset.feature_std[i]:12.4f} "
+            f"{abs_err[:, i].max():12.3e} {rel_err[:, i].max():12.3e}"
+        )
+    print(f"\nworst relative error: {rel_err.max():.3e}")
+
+    _assert_within_tolerance(dataset, rel_err, _ROUNDTRIP_TOLERANCE)
+    print("test_standardization_roundtrip: OK")
