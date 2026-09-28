@@ -177,9 +177,7 @@ class RRM(Optimizer[Y], Generic[Y]):
                     if j >= iters:  # Stop after a fixed number of iterations
                         break
 
-            grads = grad(lambda p: jnp.mean(self.loss_fn(p, x, y)))(
-                self.current_params
-            )
+            grads = grad(lambda p: jnp.mean(self.loss_fn(p, x, y)))(params)
 
             params_new = jax.tree_util.tree_map(
                 lambda x, y: self.proj_fn(x - self.lr * y)
