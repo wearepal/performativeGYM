@@ -1,10 +1,14 @@
 import json
 import os
+import time
 from enum import Enum, auto
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import wandb
+
+if TYPE_CHECKING:
+    from mlflow.entities import Metric
 
 __all__ = ["Logger", "Log"]
 
@@ -44,6 +48,15 @@ class Logger:
                     mlflow.start_run(run_name=name)
                 mlflow.set_tag("group", group)
                 mlflow.log_params(config)
+                # `mlflow.log_metrics` makes two blocking `get_run` requests on every
+                # call, which against a remote server costs more than a training step.
+                # Metrics are instead buffered and sent with `MlflowClient.log_batch`,
+                # which makes a single request per batch.
+                run = mlflow.active_run()  # `set_tag` started one if none was active
+                assert run is not None
+                self._mlflow_client = mlflow.MlflowClient()
+                self._mlflow_run_id = run.info.run_id
+                self._mlflow_metrics: list[Metric] = []
 
     def finish(self) -> None:
         match self.log_type:
@@ -56,6 +69,7 @@ class Logger:
                 # pd.DataFrame(self.data).to_csv(self.save_dir, index=False)
             case Log.ML_FLOW:
                 import mlflow
+                self._flush_mlflow_metrics()
                 if self.login:
                     mlflow.end_run()
 
@@ -70,8 +84,27 @@ class Logger:
                     else:
                         self.data[key] = [value]
             case Log.ML_FLOW:
-                import mlflow
-                mlflow.log_metrics(data, step=step)
+                from mlflow.entities import Metric
+                from mlflow.utils.validation import MAX_METRICS_PER_BATCH
+
+                timestamp = int(time.time() * 1000)
+                self._mlflow_metrics.extend(
+                    Metric(key, float(value), timestamp, step)
+                    for key, value in data.items()
+                )
+                if len(self._mlflow_metrics) >= MAX_METRICS_PER_BATCH:
+                    self._flush_mlflow_metrics()
+
+    def _flush_mlflow_metrics(self) -> None:
+        from mlflow.utils.validation import MAX_METRICS_PER_BATCH
+
+        metrics = self._mlflow_metrics
+        for start in range(0, len(metrics), MAX_METRICS_PER_BATCH):
+            self._mlflow_client.log_batch(
+                self._mlflow_run_id,
+                metrics=metrics[start : start + MAX_METRICS_PER_BATCH],
+            )
+        self._mlflow_metrics = []
 
     def log_table(self, name: str, value: Any) -> None:
         match self.log_type:
